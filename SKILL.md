@@ -72,6 +72,7 @@ EOF
 - 1つでも失敗すると何も保存されない。エラーに候補の id が出るので、それを見て直す。
 - `<<'EOF'` が使えないシェル（PowerShell）では、ops を小さな JSON ファイルに書いて `apply ops.json`。
 - 構成をほぼ作り直すような大きな変更のときだけ、JSON を Write で書き直してよい。
+- `features/<id>` の下を直す依頼で、その feature に `file` がある（`.feature` から取り込んだ）場合は、JSON ではなく `.feature` ファイルを直して `import-gherkin.js` を再実行する（JSON だけ直すと次の取り込みで消える）。`verifies` の変更だけは `edit.js` でよい（取り込み時に引き継がれる）。
 
 **HTML を直接編集しない。** 変更はすべて JSON に対して行う。
 
@@ -99,6 +100,8 @@ EOF
    node "<このスキルのフォルダ>/scripts/import-gherkin.js" docs/design/<slug>.design.json tests/features
    ```
    - ファイルかフォルダを渡す（複数可）。保存と HTML 再生成は自動。`--dry` で保存せずに確認できる。
+   - リポジトリのルートで実行する（`file` はカレントディレクトリからの相対パスで記録され、再取り込み時の照合に使うため）。
+   - 対応は英語と日本語のキーワードだけ。Rule の中の Background・Rule の説明文は取り込まれない（`[WARN]` が出たらユーザーに伝える）。
    - `@REQ-001` のように requirements の id と同じタグは、自動で `verifies` になる。それ以外の対応は `edit.js` の `set .../verifies` で足す。
    - `.feature` を直したら同じコマンドを再実行する。id と手で足した `verifies` は、シナリオ名が同じなら引き継がれる。「ファイルから消えたシナリオ」と出たら、名前が変わったシナリオの `verifies` を付け直す。
    - `[ERROR]` は元ファイルの構文の問題。元ファイルは勝手に直さず、ユーザーに行番号を伝える。

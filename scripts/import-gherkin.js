@@ -61,13 +61,14 @@ function parse(text, file) {
   let feature = null, cur = null, rule = null, tags = [], ruleTags = [];
   let steps = null, lastStep = null, ex = null, desc = null;
   let i = 0;
+  const ruleDescs = [];
   for (; i < lines.length; i++) {
     const raw = lines[i], line = raw.trim();
     if (!line) { if (desc) desc.push(""); continue; }
     if (line.startsWith("#")) continue;
 
     // DocString
-    const fence = /^("""|```)/.exec(line);
+    const fence = /^("""|```)\s*(\S*)/.exec(line);
     if (fence) {
       if (!lastStep) throw err(i, "DocString の前にステップがありません");
       const indent = raw.length - raw.trimStart().length, body = [];
@@ -76,7 +77,7 @@ function parse(text, file) {
         body.push(l.slice(Math.min(indent, l.length - l.trimStart().length)).replace(/\\"\\"\\"/g, '"""'));
       }
       if (i >= lines.length) throw err(i - 1, `DocString の閉じ ${fence[1]} がありません`);
-      steps[steps.length - 1] = { text: lastStep, ...(isObj(steps[steps.length - 1]) ? steps[steps.length - 1] : {}), doc: body.join("\n") };
+      steps[steps.length - 1] = { text: lastStep, ...(isObj(steps[steps.length - 1]) ? steps[steps.length - 1] : {}), doc: body.join("\n"), ...(fence[2] ? { docType: fence[2] } : {}) };
       continue;
     }
 
@@ -116,7 +117,8 @@ function parse(text, file) {
         cur = null;
       } else if (kind === "rule") {
         rule = name; ruleTags = tags; cur = null; steps = null;
-        desc = [];
+        if (tags.length) warns.push(`${file}:${i + 1}: Rule のタグ ${tags.map((t) => "@" + t).join(" ")} は、requirements の id と同じものが verifies になるだけで、タグとしては残りません`);
+        desc = []; ruleDescs.push([i, desc]);
       } else if (kind === "scenario" || kind === "outline") {
         cur = { name, tags, _inherit: [...feature.tags, ...ruleTags], steps: [] };
         if (rule) cur.rule = rule;
@@ -144,6 +146,7 @@ function parse(text, file) {
     throw err(i, "解釈できない行です（ステップは Given / When / Then / And / But か 前提 / もし / ならば / かつ / しかし で始める）");
   }
   if (!feature) throw new ParseError(`${file}: Feature がありません`);
+  for (const [at, d] of ruleDescs) if (d.some((x) => x)) warns.push(`${file}:${at + 1}: Rule の説明文は取り込まれません`);
 
   const text2 = (a) => (a || []).join("\n").trim();
   feature.description = text2(feature._desc);
@@ -166,21 +169,41 @@ function toFeature(parsed, file, data, old) {
   f.file = file;
   if (parsed.tags.length) f.tags = parsed.tags;
   if (parsed.background && parsed.background.length) f.background = parsed.background;
+  // 1回目: 名前が同じ既存シナリオを先にすべて対応づける（新しいシナリオが既存の id を奪わないように）
+  const claimed = new Set();
+  const prevs = parsed.scenarios.map((p) => {
+    const o = oldSc.find((x) => x.name === p.name && !claimed.has(x));
+    if (o) claimed.add(o);
+    return o || null;
+  });
+  const reserved = new Set(oldSc.map((o) => String(o.id)));
   const used = new Set();
+  const tagReqs = (tags) => new Set((tags || []).map(tagName).filter((n) => reqIds.has(n)));
+  const oldFeatTags = old && Array.isArray(old.tags) ? old.tags : [];
+  // 2回目: id を決める。対応のないシナリオには、既存のどの id とも重ならない id を付ける
   f.scenarios = parsed.scenarios.map((p, idx) => {
-    const prev = oldSc.find((o) => o.name === p.name && !used.has(o.id));
-    let id = prev ? prev.id : slug(p.name);
-    if (!id || id.length > 40 || used.has(id)) id = `s${idx + 1}`;
-    while (used.has(id)) id += "-2";
+    const prev = prevs[idx];
+    let id;
+    if (prev && prev.id != null && !used.has(String(prev.id))) id = String(prev.id);
+    else {
+      const taken = (x) => used.has(x) || reserved.has(x);
+      id = slug(p.name);
+      if (!id || id.length > 40) {
+        let n = idx + 1;
+        while (taken(`s${n}`)) n++;
+        id = `s${n}`;
+      }
+      while (taken(id)) id += "-2";
+    }
     used.add(id);
     const sc = { id, name: p.name };
     if (p.tags.length) sc.tags = p.tags;
     if (p.rule) sc.rule = p.rule;
-    const verifies = [...(prev && Array.isArray(prev.verifies) ? prev.verifies : [])];
-    for (const t of [...p._inherit, ...p.tags]) {
-      const n = tagName(t);
-      if (reqIds.has(n) && !verifies.includes(n)) verifies.push(n);
-    }
+    // 手で足した verifies は残す。タグ由来のものは、タグが消えたら外す
+    const nowTag = tagReqs([...p._inherit, ...p.tags]);
+    const wasTag = prev ? tagReqs([...oldFeatTags, ...(Array.isArray(prev.tags) ? prev.tags : [])]) : new Set();
+    const verifies = (prev && Array.isArray(prev.verifies) ? prev.verifies : []).filter((v) => !(wasTag.has(v) && !nowTag.has(v)));
+    for (const n of nowTag) if (!verifies.includes(n)) verifies.push(n);
     if (verifies.length) sc.verifies = verifies;
     sc.steps = p.steps;
     if (p.examples) sc.examples = p.examples;
@@ -188,7 +211,7 @@ function toFeature(parsed, file, data, old) {
     if (detail) sc.detail = detail;
     return sc;
   });
-  const dropped = oldSc.filter((o) => !f.scenarios.some((s) => s.id === o.id && s.name === o.name)).map((o) => o.name || o.id);
+  const dropped = oldSc.filter((o) => !claimed.has(o)).map((o) => o.name || o.id);
   return { f, dropped };
 }
 

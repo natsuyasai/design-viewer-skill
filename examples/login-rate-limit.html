@@ -1343,7 +1343,7 @@ function gherkinText(f){
   const cell=c=>String(c??"").replace(/\\/g,"\\\\").replace(/\|/g,"\\|").replace(/\n/g,"\\n");
   const tbl=(rows,ind)=>arr(rows).map(r=>ind+"| "+arr(r).map(cell).join(" | ")+" |\n").join("");
   const steps=(xs,ind)=>arr(xs).map(st=>{const o=st&&typeof st==="object"?st:{};
-    return ind+stepText(st).trim()+"\n"+tbl(o.table,ind+"  ")+(o.doc!=null?ind+'  """\n'+String(o.doc).split("\n").map(l=>ind+"  "+l).join("\n")+"\n"+ind+'  """\n':"");}).join("");
+    return ind+stepText(st).trim()+"\n"+tbl(o.table,ind+"  ")+(o.doc!=null?ind+'  """'+(o.docType||"")+'\n'+String(o.doc).split("\n").map(l=>ind+"  "+l).join("\n")+"\n"+ind+'  """\n':"");}).join("");
   let t=(ja?"# language: ja\n":"")+tags(f.tags,"")+`${W.f}: ${f.name||f.id}\n`;
   if(f.description)t+=String(f.description).split("\n").map(l=>"  "+l).join("\n")+"\n";
   if(arr(f.background).length)t+=`\n  ${W.b}:\n`+steps(f.background,"    ");

@@ -65,7 +65,7 @@ step: キーワードを含めた 1 行をそのまま文字列で書く。
 - 日本語: `"前提 ..."` `"もし ..."` `"ならば ..."` `"かつ ..."` `"しかし ..."`（`且つ` `但し` `ただし` `然し` も可）
 - データ表や DocString がある行はオブジェクトにする:
   `{"text": "And 次のユーザーがいる", "table": [["name", "role"], ["alice", "admin"]]}`
-  `{"text": "Then 本文は次の通り", "doc": "{\"ok\": true}"}`
+  `{"text": "Then 本文は次の通り", "doc": "{\"ok\": true}", "docType": "json"}`（`docType` は `"""json` の種類。省略可）
 - `<placeholder>` はそのまま書く（画面で強調される）。
 
 `.feature` ファイルがあるときは `scripts/import-gherkin.js` でこの形に変換できる（手で写さない）。
