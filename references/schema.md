@@ -22,6 +22,54 @@
 | constraints | string[] | 前提・制約 |
 | nonGoals | string[] | やらないこと |
 
+## requirements — 要件（EARS 形式）
+| キー | 型 | 説明 |
+|---|---|---|
+| id ★ | string | 元資料の要件 ID があればそのまま（`REQ-001` など）。なければ `req-lock` など |
+| text ★ | string | EARS の文。**元資料の文を一字一句そのまま**（要約・言い換え・翻訳しない。長くてよい） |
+| pattern | `ubiquitous` / `event` / `state` / `unwanted` / `optional` / `complex` | 常時（〜は…しなければならない）/ イベント（When / 〜とき）/ 状態（While / 〜の間）/ 異常系（If…then / 〜場合）/ オプション（Where / 〜がある場合）/ 複合 |
+| status | `new` / `changed` / `existing` | |
+| priority | string | `Must` `Should` `高` など。元資料の表記のまま |
+| components | string[] | この要件を実現する component id |
+| rationale | string | 理由・出典（1行） |
+| detail | string | 補足（書式可） |
+
+`When / While / Where / If / Then / shall` と「〜とき、」「〜の間、」「〜場合、」「しなければならない」が画面で強調される。
+
+## features — テスト（Gherkin）
+1 feature = 1 つの `.feature`（機能）。
+| キー | 型 | 説明 |
+|---|---|---|
+| id ★ | string | `f-login` など |
+| name ★ | string | `Feature:` / `機能:` の名前 |
+| description | string | Feature 直下の説明文 |
+| file | string | `.feature` ファイルのパス（あれば） |
+| tags | string[] | `@` は付けても付けなくてもよい |
+| background | step[] | `Background:` / `背景:` のステップ |
+| scenarios ★ | scenario[] | |
+
+scenario:
+| キー | 型 | 説明 |
+|---|---|---|
+| id ★ | string | feature の中で一意。`s-lock` など |
+| name ★ | string | `Scenario:` / `シナリオ:` の名前 |
+| tags | string[] | |
+| rule | string | `Rule:` / `ルール:` の下にある場合、その名前 |
+| verifies | string[] | このシナリオが検証する requirement id |
+| steps ★ | step[] | |
+| examples | `{"name", "header": [], "rows": [[]]}`[] | `Scenario Outline` の `Examples:`。あればアウトラインとして表示 |
+| detail | string | 補足 |
+
+step: キーワードを含めた 1 行をそのまま文字列で書く。
+- 英語: `"Given ..."` `"When ..."` `"Then ..."` `"And ..."` `"But ..."` `"* ..."`
+- 日本語: `"前提 ..."` `"もし ..."` `"ならば ..."` `"かつ ..."` `"しかし ..."`（`且つ` `但し` `ただし` `然し` も可）
+- データ表や DocString がある行はオブジェクトにする:
+  `{"text": "And 次のユーザーがいる", "table": [["name", "role"], ["alice", "admin"]]}`
+  `{"text": "Then 本文は次の通り", "doc": "{\"ok\": true}"}`
+- `<placeholder>` はそのまま書く（画面で強調される）。
+
+path の例: `requirements/REQ-001/text`、`features/f-login/scenarios/s-lock/steps/3`、`features/f-login/background/1`
+
 ## layers（任意）
 `string[]`。構成図の段の順番（上から）。省略時は components に出てきた順。
 

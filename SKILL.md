@@ -1,6 +1,6 @@
 ---
 name: design-viewer
-description: コーディング作業の設計（構成図・処理フロー・データ・API・設計判断・リスク・実装手順）を、クリックで詳細を掘れる単一HTMLにまとめる。実装前の設計、設計レビュー、「設計をHTMLで見たい」「設計書を作って」「実装方針を整理して」と言われたときに使う。
+description: コーディング作業の設計（要件・構成図・処理フロー・データ・API・設計判断・テストシナリオ・リスク・実装手順）を、クリックで詳細を掘れる単一HTMLにまとめる。EARS 形式の要件や Gherkin のテストケースも取り込める。実装前の設計、設計レビュー、「設計をHTMLで見たい」「設計書を作って」「実装方針を整理して」と言われたときに使う。
 ---
 
 # 設計ビューア
@@ -13,6 +13,7 @@ HTML / CSS / JS は書かない。描画・折りたたみ・検索・図の生�
 
 1. **調べる**: 対象のコードを読む（関係するファイル、既存の構成、呼び出し関係）。
    - わからないことは推測で埋めない → `questions` に入れる。
+   - 元資料に EARS 形式の要件や Gherkin のテストケースがあれば、下の「要件・テストの取り込み」に従う。
 2. **規模を決める**: 下の「規模別のセクション」から使うセクションを選ぶ。
 3. **JSON を書く**: `docs/design/<slug>.design.json`（slug は英小文字とハイフン）。
    - フィールドは `references/schema.md` を見る。迷ったら `examples/login-rate-limit.design.json` を真似る。
@@ -65,6 +66,7 @@ EOF
 ```
 
 - path は `セクション/キー/フィールド`。キーは id、id がなければ 1 始まりの番号（画面の表示と同じ）。
+  テストのステップは `features/f-login/scenarios/s-lock/steps/3`、要件は `requirements/REQ-001/text`。
 - value は JSON として読めれば JSON、読めなければ文字列。数字を文字列にしたいときは `'"5"'`。
 - id を変えるときは必ず `rename`（edges や tasks などの参照も一緒に直る）。
 - 1つでも失敗すると何も保存されない。エラーに候補の id が出るので、それを見て直す。
@@ -81,7 +83,23 @@ EOF
 | 中 | 機能追加、APIの追加 | 小 + edges, flows, apis, risks, questions |
 | 大 | 新サービス、DB設計を含む | 中 + layers, entities, relations, decisions |
 
+規模に関係なく、元資料に要件（EARS）があれば `requirements`、テストケース（Gherkin）があれば `features` を足す。
+
 使わないセクションはキーごと省く（空配列も書かない）。ナビから自動で消える。
+
+## 要件・テストの取り込み（EARS / Gherkin）
+
+要件とテストケースは「設計の要約」ではなく「仕様の原文」として扱う。下のルールは「書き方ルール」の 1・3（短くする・数を絞る）より優先する。
+
+1. **原文のまま写す**: `requirements[].text` と Gherkin の各ステップは、元資料の文を一字一句そのまま書く。要約・言い換え・翻訳・統合・分割をしない。件数も減らさない（build.js は長さ・件数の警告を出さない）。
+2. **ID は元資料のまま**: `REQ-001` のような ID があれば、そのまま `id` にする（英小文字に直さない）。ID がない場合だけ自分で付ける。
+3. **EARS の pattern を付ける**: 文の形から `ubiquitous`（常時）/ `event`（When・〜とき）/ `state`（While・〜の間）/ `unwanted`（If…then・〜場合）/ `optional`（Where）/ `complex`（複数の組み合わせ）を選ぶ。
+4. **Gherkin は構造に分けるだけ**: Feature → `features`、Background → `background`、Scenario / Scenario Outline → `scenarios`、Examples → `examples`、Rule → `scenario.rule`。ステップは `前提` / `Given` などのキーワードを含めた 1 行をそのまま文字列にする。データ表と DocString はステップをオブジェクトにして `table` / `doc` に入れる。言語（日本語 / 英語）は元のまま。
+5. **つなぐ**: シナリオがどの要件を確かめるかを `scenarios[].verifies` に、要件を実現するコンポーネントを `requirements[].components` に書く。元資料に対応が書かれていなければ、内容から判断して付け、判断に自信がないものは `questions` に入れる。
+6. **元資料にないものを足さない**: テストケースが足りないと思ったら、シナリオを勝手に追加せず `risks` か `questions` に書く（ユーザーに頼まれたら追加してよい）。
+7. **検証されていない要件の WARN** は、対応するシナリオが本当にないなら無視してよい。報告時に「シナリオのない要件: REQ-xxx」と一言添える。
+
+画面では「要件」タブ（検証率・検証シナリオへのリンク）と「テスト」タブ（Given/When/Then の色分け、`.feature` 用テキストの出力）に表示される。
 
 ## 書き方ルール（読む人の負担を減らす）
 
@@ -89,7 +107,7 @@ EOF
 2. **最初に結論**: `overview.goal` は1文。`overview.tldr` は3つまで。
 3. **数を絞る**: 1つの layer に 6 個まで。1つのフローは 12 ステップまで。超えるなら layer やフローを分ける。
 4. **新旧を区別**: `components[].status` は `new`（新規）/ `changed`（変更）/ `existing`（既存・変更なし）。変更範囲が図の色で一目でわかる。
-5. **id で参照**: id は英小文字とハイフン（`rate-limiter`）。`edges` / `tasks.components` / `tasks.dependsOn` / `apis.component` / `relations` は必ず定義済みの id を使う。flows / apis / decisions / risks / questions にも id を付ける（修正時に path で指定できる）。
+5. **id で参照**: id は英小文字とハイフン（`rate-limiter`。元資料の要件 ID は例外でそのまま）。`edges` / `tasks.components` / `tasks.dependsOn` / `apis.component` / `relations` / `requirements.components` / `scenarios.verifies` は必ず定義済みの id を使う。flows / apis / decisions / risks / questions にも id を付ける（修正時に path で指定できる）。
 6. **実在の名前を使う**: コンポーネント名・ファイルパスはコード上の名前に合わせる。新規ファイルは作成予定のパスを書く。
 7. **タスクは実装順**: `tasks` は上から実装する順に並べ、各タスクに `done_when`（完了条件）を書くとよい。
 8. **ユーザーの言語で書く**: 中身はユーザーとの会話の言語で書く。
