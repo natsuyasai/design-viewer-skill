@@ -183,6 +183,23 @@ svg .mk{fill:var(--faint)}
 .prog i{display:block;height:100%;background:var(--accent);transition:width .2s}
 .tnum{color:var(--faint);font-variant-numeric:tabular-nums;font-size:12px;margin-right:4px}
 
+/* ---------- requirements / tests ---------- */
+.rid{font-family:var(--mono);font-size:11.5px;font-weight:700;color:var(--sub)}
+.req-t{font-size:14.5px;margin:6px 0 4px}
+.req-t .kw{color:var(--accent);font-weight:700}
+.refs{margin-top:6px;font-size:12px}
+.scn{margin-top:10px;background:var(--bg)}
+.scn-h{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tag{font-family:var(--mono);font-size:11px;color:var(--sub)}
+.gk{list-style:none;padding:0;margin:6px 0 0;font-size:13px}
+.gk li{padding:2px 0 2px 8px;border-left:3px solid var(--line);margin:0}
+.gk li.k-g{border-left-color:var(--new)} .gk li.k-w{border-left-color:var(--accent)} .gk li.k-t{border-left-color:var(--chg)}
+.gk .kw{font-weight:700;margin-right:4px}
+.gk .k-g>.kw{color:var(--new)} .gk .k-w>.kw{color:var(--accent)} .gk .k-t>.kw{color:var(--chg)}
+.ph{font-family:var(--mono);font-size:.9em;color:var(--accent)}
+.gt{width:auto;margin:4px 0 6px}
+.gt td,.gt th{border:1px solid var(--line);padding:2px 8px}
+
 /* ---------- drawer ---------- */
 #scrim{position:fixed;inset:0;background:rgba(0,0,0,.25);opacity:0;pointer-events:none;transition:opacity .15s;z-index:30}
 #scrim.on{opacity:1;pointer-events:auto}
@@ -707,7 +724,191 @@ svg .mk{fill:var(--faint)}
     "t3",
     "t4"
    ],
-   "done_when": "p95 の増加が 10ms 以内"
+   "done_when": "p95 の増加が 10ms 以内",
+   "files": [
+    "tests/features/login_lock.feature"
+   ]
+  }
+ ],
+ "requirements": [
+  {
+   "id": "REQ-001",
+   "pattern": "event",
+   "status": "new",
+   "priority": "Must",
+   "text": "アカウントのログイン失敗が15分以内に5回に達したとき、認証システムはそのアカウントを15分間ロックしなければならない。",
+   "components": [
+    "rate-limiter"
+   ],
+   "rationale": "パスワード総当たり攻撃を防ぐ"
+  },
+  {
+   "id": "REQ-002",
+   "pattern": "state",
+   "status": "new",
+   "priority": "Must",
+   "text": "アカウントがロックされている間、認証システムはログイン要求に 429 と `Retry-After` を返さなければならない。",
+   "components": [
+    "auth-controller",
+    "rate-limiter"
+   ]
+  },
+  {
+   "id": "REQ-003",
+   "pattern": "event",
+   "status": "new",
+   "priority": "Should",
+   "text": "When a login succeeds, the authentication system shall reset the failure counter of the account.",
+   "components": [
+    "rate-limiter"
+   ]
+  },
+  {
+   "id": "REQ-004",
+   "pattern": "unwanted",
+   "status": "new",
+   "priority": "Should",
+   "text": "Redis に接続できない場合、認証システムは回数制限をせずにログイン処理を続行しなければならない。",
+   "components": [
+    "rate-limiter"
+   ],
+   "rationale": "設計判断 d-failopen（可用性を優先）"
+  },
+  {
+   "id": "REQ-005",
+   "pattern": "ubiquitous",
+   "status": "new",
+   "priority": "Could",
+   "text": "認証システムはロックの発生を監査ログに記録しなければならない。",
+   "components": [
+    "audit-log"
+   ]
+  }
+ ],
+ "features": [
+  {
+   "id": "f-lock",
+   "name": "ログイン試行回数制限",
+   "file": "tests/features/login_lock.feature",
+   "tags": [
+    "auth"
+   ],
+   "description": "総当たり攻撃を防ぐため、失敗が続いたアカウントを一時的にロックする",
+   "background": [
+    "前提 ユーザー \"alice\" が登録されている",
+    "かつ \"alice\" のログイン失敗回数は 0 回である"
+   ],
+   "scenarios": [
+    {
+     "id": "s-lock",
+     "name": "5回失敗するとロックされる",
+     "tags": [
+      "smoke"
+     ],
+     "verifies": [
+      "REQ-001",
+      "REQ-005"
+     ],
+     "steps": [
+      "前提 \"alice\" が誤ったパスワードで 4 回ログインに失敗している",
+      "もし \"alice\" が誤ったパスワードでログインする",
+      "ならば \"alice\" はロックされる",
+      "かつ 監査ログに \"account_locked\" が記録される"
+     ]
+    },
+    {
+     "id": "s-locked-response",
+     "name": "ロック中は 429 を返す",
+     "verifies": [
+      "REQ-002"
+     ],
+     "steps": [
+      "前提 \"alice\" はロックされている",
+      "もし \"alice\" が正しいパスワードでログインする",
+      "ならば ステータスコード 429 が返る",
+      {
+       "text": "かつ レスポンスの本文は次の通りである",
+       "doc": "{\"error\": \"locked\", \"retryAfter\": 900}\n<\/script> を含んでも壊れない"
+      }
+     ]
+    },
+    {
+     "id": "s-threshold",
+     "name": "閾値の境界",
+     "verifies": [
+      "REQ-001"
+     ],
+     "steps": [
+      "前提 \"alice\" が誤ったパスワードで <失敗回数> 回ログインに失敗している",
+      "ならば \"alice\" のロック状態は <状態> である"
+     ],
+     "examples": [
+      {
+       "header": [
+        "失敗回数",
+        "状態"
+       ],
+       "rows": [
+        [
+         "4",
+         "未ロック"
+        ],
+        [
+         "5",
+         "ロック"
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "id": "s-redis-down",
+     "name": "Redis 障害時は制限せずに通す",
+     "tags": [
+      "resilience"
+     ],
+     "verifies": [
+      "REQ-004"
+     ],
+     "steps": [
+      "前提 Redis に接続できない",
+      "もし \"alice\" が正しいパスワードでログインする",
+      "ならば ログインに成功する"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "f-reset",
+   "name": "Failure counter reset",
+   "file": "tests/features/login_reset.feature",
+   "scenarios": [
+    {
+     "id": "s-reset",
+     "name": "Successful login resets the counter",
+     "verifies": [
+      "REQ-003"
+     ],
+     "steps": [
+      "Given \"alice\" has failed to log in 3 times",
+      "When \"alice\" logs in with the correct password",
+      "Then the failure counter of \"alice\" is 0",
+      {
+       "text": "And the counter keys are",
+       "table": [
+        [
+         "key",
+         "value"
+        ],
+        [
+         "fail:acct:alice",
+         "(none)"
+        ]
+       ]
+      }
+     ]
+    }
+   ]
   }
  ],
  "_source": "examples/login-rate-limit.design.json"
@@ -754,14 +955,20 @@ const L=k=>arr(D[k]).filter(x=>x&&typeof x==="object");
 const meta=D.meta||{}, ov=D.overview||{};
 const comps=L("components"),edges=L("edges"),flows=L("flows"),ents=L("entities"),rels=L("relations"),
       apis=L("apis"),decs=L("decisions"),risks=L("risks"),qs=L("questions"),tasks=L("tasks");
+const key=(it,i)=>it&&it.id!=null?String(it.id):String(i+1);
 const idx=a=>{const m={};a.forEach(x=>{if(x.id!=null&&!(x.id in m))m[x.id]=x;});return m;};
-const C=idx(comps),E=idx(ents),T=idx(tasks),ACT=idx(L("actors"));
+const reqs=L("requirements"),feats=L("features");
+const scnOf=f=>arr(f.scenarios).filter(x=>x&&typeof x==="object");
+const SCN=[];feats.forEach((f,fi)=>scnOf(f).forEach((sc,si)=>SCN.push({f,sc,ref:key(f,fi)+"/"+key(sc,si),path:"features/"+key(f,fi)+"/scenarios/"+key(sc,si)})));
+const C=idx(comps),E=idx(ents),T=idx(tasks),ACT=idx(L("actors")),R=idx(reqs),SC=Object.fromEntries(SCN.map(x=>[x.ref,x]));
+const verifiers=id=>SCN.filter(x=>arr(x.sc.verifies).includes(id));
 const nameOf=id=>(C[id]&&C[id].name)||(ACT[id]&&ACT[id].name)||id;
 const entName=id=>(E[id]&&E[id].name)||id;
 const ST={new:"新規",changed:"変更",existing:"既存"};
 const LV={high:"高",mid:"中",low:"低"};
 const MS={draft:"草案",review:"レビュー中",approved:"承認済"};
 const DS={decided:"決定",proposed:"提案中"};
+const PT={ubiquitous:"常時",event:"イベント",state:"状態",unwanted:"異常系",optional:"オプション",complex:"複合"};
 const KIND={service:"サービス",module:"モジュール",ui:"UI",screen:"画面",db:"DB",external:"外部",job:"ジョブ",lib:"ライブラリ",file:"ファイル",script:"スクリプト",queue:"キュー",cache:"キャッシュ",class:"クラス",function:"関数"};
 const badge=(cls,map)=>cls?`<span class="b ${esc(cls)}">${esc((map&&map[cls])||cls)}</span>`:"";
 const tKey=t=>"task:"+(t.id||t.title);
@@ -778,7 +985,9 @@ if(parseErr)warns.push("JSON の解析に失敗しました: "+parseErr.message)
 else{
   if(!meta.title)warns.push("meta.title がありません");
   const dup=(a,n)=>{const s=new Set();a.forEach(x=>{if(x.id==null)return;if(s.has(x.id))warns.push(`${n}: id "${x.id}" が重複`);s.add(x.id);});};
-  dup(comps,"components");dup(ents,"entities");dup(tasks,"tasks");dup(flows,"flows");
+  dup(comps,"components");dup(ents,"entities");dup(tasks,"tasks");dup(flows,"flows");dup(reqs,"requirements");dup(feats,"features");
+  reqs.forEach(r=>arr(r.components).forEach(c=>{if(!C[c])warns.push(`requirements "${r.id}": components "${c}" が components にありません`);}));
+  SCN.forEach(x=>arr(x.sc.verifies).forEach(v=>{if(!R[v])warns.push(`${x.path}: verifies "${v}" が requirements にありません`);}));
   comps.forEach((c,i)=>{if(c.id==null)warns.push(`components[${i}] に id がありません`);});
   edges.forEach(e=>{if(!C[e.from])warns.push(`edges: from "${e.from}" が components にありません`);if(!C[e.to])warns.push(`edges: to "${e.to}" が components にありません`);});
   rels.forEach(r=>{if(!E[r.from])warns.push(`relations: from "${r.from}" が entities にありません`);if(!E[r.to])warns.push(`relations: to "${r.to}" が entities にありません`);});
@@ -797,18 +1006,23 @@ $("#h-title").innerHTML=`${esc(meta.title||"（無題の設計）")} ${badge(met
 $("#h-sum").innerHTML=[meta.summary&&inline(meta.summary),meta.updated&&`更新 ${esc(meta.updated)}`,meta.author&&esc(meta.author)].filter(Boolean).join(" ・ ");
 
 /* ============ helpers for refs ============ */
+function refObj(type,id){
+  if(type==="comp")return C[id]&&{o:C[id],label:C[id].name||id,path:"components/"+id};
+  if(type==="ent")return E[id]&&{o:E[id],label:E[id].name||id,path:"entities/"+id};
+  if(type==="task")return T[id]&&{o:T[id],label:T[id].title||id,path:"tasks/"+id};
+  if(type==="req")return R[id]&&{o:R[id],label:id,title:R[id].text,path:"requirements/"+id};
+  if(type==="sc")return SC[id]&&{o:SC[id].sc,label:SC[id].sc.name||id,path:SC[id].path};
+}
 function ref(type,id){
-  const o=type==="comp"?C[id]:type==="ent"?E[id]:T[id];
-  const label=o?(o.name||o.title||id):id;
-  return o?`<button class="chip" data-ref="${type}:${esc(id)}">${esc(label)}</button>`
-          :`<span class="chip missing" title="未定義の参照">${esc(label)}</span>`;
+  const r=refObj(type,id);
+  return r?`<button class="chip" data-ref="${type}:${esc(id)}"${r.title?` title="${esc(r.title)}"`:""}>${esc(r.label)}</button>`
+          :`<span class="chip missing" title="未定義の参照">${esc(id)}</span>`;
 }
 const refs=(type,ids)=>arr(ids).map(id=>ref(type,id)).join("");
 let expandAll=false;
 const OPEN=()=>expandAll?" open":"";
 const det=(title,body)=>body?`<details${OPEN()}><summary>${title}</summary><div class="dbody">${body}</div></details>`:"";
 const notes=()=>(store.notes&&typeof store.notes==="object")?store.notes:(store.notes={});
-const key=(it,i)=>it&&it.id!=null?String(it.id):String(i+1);
 const nb=(path,label)=>`<button class="nb${notes()[path]?" has":""}" data-note="${esc(path)}" data-label="${esc(trunc(label||"",40))}" title="修正メモ：${esc(path)}">✎</button>`;
 const fpath=f=>"flows/"+key(f,flows.indexOf(f));
 const enb=e=>nb("edges/"+(edges.indexOf(e)+1),`${nameOf(e.from)} → ${nameOf(e.to)}`);
@@ -824,7 +1038,7 @@ const resolve=path=>path==="全体"||getAt(path)!==undefined;
 /* 選択した文字が item のどのフィールドにあるかを探し、path を細かくする */
 function refine(path,text){
   const base=getAt(path);if(!base||typeof base!=="object")return path;
-  const norm=v=>String(v).replace(/[`*…]/g,"").replace(/\s+/g," ").trim().toLowerCase();
+  const norm=v=>String(v).replace(/[`*…\s]/g,"").toLowerCase();
   const t=norm(String(text).replace(/^\d+\.\s*/,""));if(t.length<2)return path;
   let best=null;
   (function rec(v,p){if(best)return;
@@ -839,11 +1053,13 @@ const files=f=>arr(f).length?`<ul>${arr(f).map(x=>`<li><code>${esc(x)}</code></l
 /* ============ sections ============ */
 const SECTIONS=[
   {k:"overview",label:"概要",n:null,lead:"目的と要点",r:rOverview},
+  {k:"req",label:"要件",n:reqs.length,lead:"EARS 形式の要件と、それを検証するシナリオ",r:rReq},
   {k:"arch",label:"構成",n:comps.length,lead:"要素をクリックで詳細・ホバーで依存関係",r:rArch},
   {k:"flows",label:"処理フロー",n:flows.length,lead:"← → キーでステップ移動",r:rFlows},
   {k:"data",label:"データ",n:ents.length,lead:"エンティティとフィールド",r:rData},
   {k:"api",label:"API・IF",n:apis.length,lead:"行をクリックで入出力",r:rApi},
   {k:"decisions",label:"設計判断",n:decs.length,lead:"何を選び、なぜか",r:rDecisions},
+  {k:"tests",label:"テスト",n:SCN.length,lead:"Gherkin のシナリオ",r:rTests},
   {k:"risks",label:"リスク・未決",n:risks.length+qs.length,lead:"懸念と要確認事項",r:rRisks},
   {k:"tasks",label:"実装手順",n:tasks.length,lead:"上から順に実装",r:rTasks},
 ].filter(s=>s.n===null||s.n>0);
@@ -857,6 +1073,9 @@ function rOverview(search){
     ${tl.length?`<div class="lbl">要点</div><ul>${tl.map(x=>`<li>${inline(x)}</li>`).join("")}</ul>`:""}
     ${det("背景",md(ov.background))}</div>`;
   const tiles=[];
+  if(reqs.length){const v=reqs.filter(r=>verifiers(r.id).length).length;
+    tiles.push(["req",reqs.length,"要件",SCN.length?`検証シナリオあり ${v}`:"",SCN.length>0&&v<reqs.length]);}
+  if(SCN.length)tiles.push(["tests",SCN.length,"テストシナリオ",`機能 ${feats.length}`]);
   if(comps.length){const n=comps.filter(c=>c.status==="new").length,c=comps.filter(c=>c.status==="changed").length;
     tiles.push(["arch",comps.length,"構成要素",`新規 ${n} ・ 変更 ${c}`]);}
   if(flows.length)tiles.push(["flows",flows.length,"処理フロー",flows.slice(0,2).map(f=>f.name).join("、")]);
@@ -1089,13 +1308,78 @@ function rTasks(){
       ${det("詳細",md(t.detail)+(arr(t.files).length?`<div class="lbl">ファイル</div>${files(t.files)}`:"")+(t.done_when?`<div class="lbl">完了条件</div>${md(t.done_when)}`:""))}</div></div>`;}).join("")}</div>`;
 }
 
+/* ---- requirements (EARS) ---- */
+const EARS_KW=/\b(?:WHEN|WHILE|WHERE|IF|THEN|SHALL|When|While|Where|If|Then|shall)\b|(?:とき|間|場合)(?=、)|しなければならない/g;
+function ears(s){return esc(s).replace(EARS_KW,m=>`<span class="kw">${m}</span>`).replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>");}
+function rReq(){
+  let h="";
+  if(SCN.length){const v=reqs.filter(r=>verifiers(r.id).length).length;h+=`<div class="small muted">シナリオで検証されている要件 ${v} / ${reqs.length}</div><div class="prog"><i style="width:${reqs.length?Math.round(v*100/reqs.length):0}%"></i></div>`;}
+  return h+`<div class="cards">${reqs.map((r,ri)=>{const vs=verifiers(r.id);
+    return `<div class="card"${qa(r.id,r.text,r.pattern&&PT[r.pattern],r.priority,r.rationale,r.detail,r.components)}>
+      <div class="cl-row"><b class="rid click" data-ref="req:${esc(r.id)}">${esc(r.id)}</b>${badge(r.pattern,PT)}${badge(r.status,ST)}${r.priority?`<span class="b">${esc(r.priority)}</span>`:""}${nb("requirements/"+key(r,ri),r.id)}</div>
+      <div class="req-t">${ears(r.text)}</div>
+      ${r.rationale?`<div class="muted small">${inline(r.rationale)}</div>`:""}
+      ${(arr(r.components).length||SCN.length)?`<div class="refs">${arr(r.components).length?`<span class="muted">対象 </span>${refs("comp",r.components)}`:""}${SCN.length?`<span class="muted">検証 </span>${vs.length?vs.map(x=>ref("sc",x.ref)).join(""):'<span class="chip missing">なし</span>'}`:""}</div>`:""}
+      ${det("詳細",md(r.detail))}</div>`;}).join("")}</div>`;
+}
+
+/* ---- tests (Gherkin) ---- */
+const GK=/^(?:(Given|When|Then|And|But)(?=\s)|(\*)|(前提|もし|ならば|且つ|かつ|然し|しかし|但し|ただし))/;
+const GKIND={Given:"g",When:"w",Then:"t","前提":"g","もし":"w","ならば":"t"};
+const stepText=x=>String((x&&typeof x==="object"?x.text:x)??"");
+const ph=s=>esc(s).replace(/&lt;([^&\n]+?)&gt;/g,'<span class="ph">&lt;$1&gt;</span>');
+const gtable=rows=>arr(rows).length?`<table class="gt">${arr(rows).map((r,i)=>`<tr>${arr(r).map(c=>i?`<td>${ph(c)}</td>`:`<th>${ph(c)}</th>`).join("")}</tr>`).join("")}</table>`:"";
+function gSteps(steps){
+  let last="";
+  return `<ul class="gk">${arr(steps).map(st=>{const t=stepText(st).trim(),m=t.match(GK);
+    const kw=m?m[0]:"",kind=GKIND[kw]||(kw?last:"");if(GKIND[kw])last=GKIND[kw];
+    const o=st&&typeof st==="object"?st:{};
+    return `<li class="${kind?"k-"+kind:""}">${kw?`<span class="kw">${esc(kw)}</span>`:""}${ph(t.slice(kw.length).trim())}${gtable(o.table)}${o.doc!=null?`<pre><code>${esc(o.doc)}</code></pre>`:""}</li>`;}).join("")}</ul>`;
+}
+const isJa=f=>[...arr(f.background),...scnOf(f).flatMap(s=>arr(s.steps))].some(st=>/^(前提|もし|ならば|且つ|かつ|然し|しかし|但し|ただし)/.test(stepText(st).trim()));
+function gherkinText(f){
+  const ja=isJa(f),W=ja?{f:"機能",b:"背景",s:"シナリオ",o:"シナリオアウトライン",e:"例"}:{f:"Feature",b:"Background",s:"Scenario",o:"Scenario Outline",e:"Examples"};
+  const tags=(t,ind)=>arr(t).length?ind+arr(t).map(x=>String(x).startsWith("@")?x:"@"+x).join(" ")+"\n":"";
+  const tbl=(rows,ind)=>arr(rows).map(r=>ind+"| "+arr(r).join(" | ")+" |\n").join("");
+  const steps=(xs,ind)=>arr(xs).map(st=>{const o=st&&typeof st==="object"?st:{};
+    return ind+stepText(st).trim()+"\n"+tbl(o.table,ind+"  ")+(o.doc!=null?ind+'  """\n'+String(o.doc).split("\n").map(l=>ind+"  "+l).join("\n")+"\n"+ind+'  """\n':"");}).join("");
+  let t=(ja?"# language: ja\n":"")+tags(f.tags,"")+`${W.f}: ${f.name||f.id}\n`;
+  if(f.description)t+=String(f.description).split("\n").map(l=>"  "+l).join("\n")+"\n";
+  if(arr(f.background).length)t+=`\n  ${W.b}:\n`+steps(f.background,"    ");
+  scnOf(f).forEach(sc=>{const ex=arr(sc.examples).filter(e=>e&&typeof e==="object");
+    t+="\n"+tags(sc.tags,"  ")+`  ${ex.length?W.o:W.s}: ${sc.name||sc.id}\n`+steps(sc.steps,"    ");
+    ex.forEach(e=>{t+=`\n    ${W.e}:${e.name?" "+e.name:""}\n`+tbl([e.header,...arr(e.rows)],"      ");});
+  });
+  return t;
+}
+function scnBody(x,link){
+  const sc=x.sc,ex=arr(sc.examples).filter(e=>e&&typeof e==="object");
+  return `<div class="scn-h"><b${link?` class="click" data-ref="sc:${esc(x.ref)}"`:""}>${inline(sc.name||sc.id)}</b>${ex.length?'<span class="b">アウトライン</span>':""}${arr(sc.tags).map(t=>`<span class="tag">${esc(String(t).startsWith("@")?t:"@"+t)}</span>`).join("")}${nb(x.path,sc.name||sc.id)}</div>
+    ${sc.rule?`<div class="small muted">ルール：${inline(sc.rule)}</div>`:""}
+    ${gSteps(sc.steps)}
+    ${ex.map(e=>`<div class="lbl">例${e.name?"："+esc(e.name):""}</div>${gtable([e.header,...arr(e.rows)])}`).join("")}
+    ${arr(sc.verifies).length?`<div class="refs"><span class="muted">検証する要件 </span>${refs("req",sc.verifies)}</div>`:""}
+    ${det("補足",md(sc.detail))}`;
+}
+function rTests(){
+  return `<div class="cards">${feats.map((f,fi)=>{const fp="features/"+key(f,fi);
+    return `<div class="card"${qa(f.id,f.name,f.description,f.tags,f.file,arr(f.background).map(stepText),scnOf(f).map(s=>[s.name,s.tags,s.rule,s.verifies,arr(s.steps).map(stepText),s.examples,s.detail]))}>
+      <div class="cl-row"><b>${inline(f.name||f.id)}</b>${arr(f.tags).map(t=>`<span class="tag">${esc(String(t).startsWith("@")?t:"@"+t)}</span>`).join("")}<span class="muted small">シナリオ ${scnOf(f).length}</span>${nb(fp,f.name||f.id)}</div>
+      ${f.file?`<div class="small"><code>${esc(f.file)}</code></div>`:""}
+      ${f.description?`<div class="muted small">${md(f.description)}</div>`:""}
+      ${arr(f.background).length?`<div class="lbl">背景（各シナリオの前に実行）</div>${gSteps(f.background)}`:""}
+      ${scnOf(f).map((sc,si)=>{const x=SC[key(f,fi)+"/"+key(sc,si)];
+        return `<div class="card scn"${qa(sc.name,sc.tags,sc.rule,sc.verifies,arr(sc.steps).map(stepText),sc.examples,sc.detail)}>${scnBody(x,true)}</div>`;}).join("")}
+      ${det("Gherkin テキスト（.feature 用）",`<pre><code>${esc(gherkinText(f))}</code></pre>`)}</div>`;}).join("")}</div>`;
+}
+
 /* ============ drawer ============ */
 function openRef(type,id){
   let k="",h="";
   if(type==="comp"&&C[id]){const c=C[id];k="構成要素";
     const out=edges.filter(e=>e.from===id),inc=edges.filter(e=>e.to===id);
     const fl=flows.map((f,i)=>[f,i]).filter(([f])=>arr(f.steps).some(s=>s.from===id||s.to===id));
-    const ap=apis.filter(a=>a.component===id),tk=tasks.filter(t=>arr(t.components).includes(id));
+    const ap=apis.filter(a=>a.component===id),tk=tasks.filter(t=>arr(t.components).includes(id)),rq=reqs.filter(r=>arr(r.components).includes(id));
     h=`<h3>${esc(c.name||id)}</h3><div>${badge(c.status,ST)} ${c.kind?`<span class="b">${esc(KIND[c.kind]||c.kind)}</span>`:""} ${c.layer?`<span class="b">${esc(c.layer)}</span>`:""}</div>
       ${c.summary?`<p>${inline(c.summary)}</p>`:""}
       ${arr(c.responsibilities).length?`<div class="lbl">責務</div><ul>${arr(c.responsibilities).map(x=>`<li>${inline(x)}</li>`).join("")}</ul>`:""}
@@ -1105,7 +1389,17 @@ function openRef(type,id){
       ${inc.length?`<div class="lbl">呼ばれる・依存される</div>${inc.map(e=>ref("comp",e.from)+(e.label?`<span class="small muted">${esc(e.label)}</span> `:"")+enb(e)).join("<br>")}`:""}
       ${fl.length?`<div class="lbl">登場するフロー</div>${fl.map(([f,i])=>`<button class="chip" data-goflow="${i}" data-focus="${esc(id)}">${esc(f.name||f.id)}</button>`).join("")}`:""}
       ${ap.length?`<div class="lbl">API・IF</div><ul>${ap.map(a=>`<li><code>${esc(((a.method||"")+" "+(a.path||a.signature||a.name||"")).trim())}</code></li>`).join("")}</ul>`:""}
-      ${tk.length?`<div class="lbl">関連タスク</div>${refs("task",tk.map(t=>t.id))}`:""}`;
+      ${tk.length?`<div class="lbl">関連タスク</div>${refs("task",tk.map(t=>t.id))}`:""}
+      ${rq.length?`<div class="lbl">関連する要件</div>${refs("req",rq.map(r=>r.id))}`:""}`;
+  }else if(type==="req"&&R[id]){const r=R[id];k="要件";const vs=verifiers(id);
+    h=`<h3 class="rid">${esc(id)}</h3><div>${badge(r.pattern,PT)} ${badge(r.status,ST)} ${r.priority?`<span class="b">${esc(r.priority)}</span>`:""}</div>
+      <div class="req-t">${ears(r.text)}</div>
+      ${r.rationale?`<div class="lbl">理由</div>${md(r.rationale)}`:""}
+      ${r.detail?`<div class="lbl">詳細</div>${md(r.detail)}`:""}
+      ${arr(r.components).length?`<div class="lbl">対象</div>${refs("comp",r.components)}`:""}
+      ${SCN.length?`<div class="lbl">検証するシナリオ</div>${vs.length?vs.map(x=>`<div class="card scn">${scnBody(x,true)}</div>`).join(""):'<div class="muted small">まだありません</div>'}`:""}`;
+  }else if(type==="sc"&&SC[id]){const x=SC[id];k="テストシナリオ";
+    h=`<div class="small muted">${esc(x.f.name||x.f.id)}</div>${scnBody(x,false)}`;
   }else if(type==="ent"&&E[id]){const e=E[id];k="エンティティ";const rc=relChips(id);
     h=`<h3>${esc(e.name||id)}</h3><div>${badge(e.status,ST)}</div>${e.summary?`<p>${inline(e.summary)}</p>`:""}
       <div class="lbl">フィールド</div>${fieldTable(arr(e.fields))||'<div class="muted small">なし</div>'}
@@ -1119,8 +1413,8 @@ function openRef(type,id){
       ${arr(t.dependsOn).length?`<div class="lbl">前提タスク</div>${refs("task",t.dependsOn)}`:""}
       ${next.length?`<div class="lbl">後続タスク</div>${refs("task",next.map(x=>x.id))}`:""}`;
   }else return;
-  const path=(type==="comp"?"components/":type==="ent"?"entities/":"tasks/")+id,o=type==="comp"?C[id]:type==="ent"?E[id]:T[id];
-  h=`<div class="cl-row" style="margin-bottom:4px"><span class="path">${esc(path)}</span>${nb(path,o.name||o.title||id)}</div>`+h;
+  const ro=refObj(type,id);
+  h=`<div class="cl-row" style="margin-bottom:4px"><span class="path">${esc(ro.path)}</span>${nb(ro.path,ro.label)}</div>`+h;
   $("#dw-kind").textContent=k;$("#dw-body").innerHTML=h;showDrawer();
 }
 function showDrawer(){$("#dw-body").scrollTop=0;$("#drawer").classList.add("on");$("#drawer").setAttribute("aria-hidden","false");$("#scrim").classList.add("on");}
@@ -1169,7 +1463,7 @@ function copyNotes(btn){
 function closeDrawer(){const ae=document.activeElement;if(ae&&$("#drawer").contains(ae))ae.blur();$("#drawer").classList.remove("on");$("#drawer").setAttribute("aria-hidden","true");$("#scrim").classList.remove("on");}
 
 /* ============ 文字を選択 → この箇所にメモ ============ */
-const SECPATH={overview:"overview",arch:"components",data:"entities",api:"apis",decisions:"decisions",risks:"risks",tasks:"tasks"};
+const SECPATH={overview:"overview",req:"requirements",tests:"features",arch:"components",data:"entities",api:"apis",decisions:"decisions",risks:"risks",tasks:"tasks"};
 function noteCtx(el){
   const st=el.closest(".seq .st");if(st&&flows[curFlow])return {path:fpath(flows[curFlow])+"/steps/"+(+st.dataset.step+1),label:`ステップ ${+st.dataset.step+1}`};
   const pt=el.closest(".seq .pt[data-ref], .arch .node");if(pt){const id=pt.dataset.id||pt.dataset.ref.slice(5);return {path:"components/"+id,label:nameOf(id)};}

@@ -470,7 +470,191 @@
         "t3",
         "t4"
       ],
-      "done_when": "p95 の増加が 10ms 以内"
+      "done_when": "p95 の増加が 10ms 以内",
+      "files": [
+        "tests/features/login_lock.feature"
+      ]
+    }
+  ],
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "pattern": "event",
+      "status": "new",
+      "priority": "Must",
+      "text": "アカウントのログイン失敗が15分以内に5回に達したとき、認証システムはそのアカウントを15分間ロックしなければならない。",
+      "components": [
+        "rate-limiter"
+      ],
+      "rationale": "パスワード総当たり攻撃を防ぐ"
+    },
+    {
+      "id": "REQ-002",
+      "pattern": "state",
+      "status": "new",
+      "priority": "Must",
+      "text": "アカウントがロックされている間、認証システムはログイン要求に 429 と `Retry-After` を返さなければならない。",
+      "components": [
+        "auth-controller",
+        "rate-limiter"
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "pattern": "event",
+      "status": "new",
+      "priority": "Should",
+      "text": "When a login succeeds, the authentication system shall reset the failure counter of the account.",
+      "components": [
+        "rate-limiter"
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "pattern": "unwanted",
+      "status": "new",
+      "priority": "Should",
+      "text": "Redis に接続できない場合、認証システムは回数制限をせずにログイン処理を続行しなければならない。",
+      "components": [
+        "rate-limiter"
+      ],
+      "rationale": "設計判断 d-failopen（可用性を優先）"
+    },
+    {
+      "id": "REQ-005",
+      "pattern": "ubiquitous",
+      "status": "new",
+      "priority": "Could",
+      "text": "認証システムはロックの発生を監査ログに記録しなければならない。",
+      "components": [
+        "audit-log"
+      ]
+    }
+  ],
+  "features": [
+    {
+      "id": "f-lock",
+      "name": "ログイン試行回数制限",
+      "file": "tests/features/login_lock.feature",
+      "tags": [
+        "auth"
+      ],
+      "description": "総当たり攻撃を防ぐため、失敗が続いたアカウントを一時的にロックする",
+      "background": [
+        "前提 ユーザー \"alice\" が登録されている",
+        "かつ \"alice\" のログイン失敗回数は 0 回である"
+      ],
+      "scenarios": [
+        {
+          "id": "s-lock",
+          "name": "5回失敗するとロックされる",
+          "tags": [
+            "smoke"
+          ],
+          "verifies": [
+            "REQ-001",
+            "REQ-005"
+          ],
+          "steps": [
+            "前提 \"alice\" が誤ったパスワードで 4 回ログインに失敗している",
+            "もし \"alice\" が誤ったパスワードでログインする",
+            "ならば \"alice\" はロックされる",
+            "かつ 監査ログに \"account_locked\" が記録される"
+          ]
+        },
+        {
+          "id": "s-locked-response",
+          "name": "ロック中は 429 を返す",
+          "verifies": [
+            "REQ-002"
+          ],
+          "steps": [
+            "前提 \"alice\" はロックされている",
+            "もし \"alice\" が正しいパスワードでログインする",
+            "ならば ステータスコード 429 が返る",
+            {
+              "text": "かつ レスポンスの本文は次の通りである",
+              "doc": "{\"error\": \"locked\", \"retryAfter\": 900}\n</script> を含んでも壊れない"
+            }
+          ]
+        },
+        {
+          "id": "s-threshold",
+          "name": "閾値の境界",
+          "verifies": [
+            "REQ-001"
+          ],
+          "steps": [
+            "前提 \"alice\" が誤ったパスワードで <失敗回数> 回ログインに失敗している",
+            "ならば \"alice\" のロック状態は <状態> である"
+          ],
+          "examples": [
+            {
+              "header": [
+                "失敗回数",
+                "状態"
+              ],
+              "rows": [
+                [
+                  "4",
+                  "未ロック"
+                ],
+                [
+                  "5",
+                  "ロック"
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "id": "s-redis-down",
+          "name": "Redis 障害時は制限せずに通す",
+          "tags": [
+            "resilience"
+          ],
+          "verifies": [
+            "REQ-004"
+          ],
+          "steps": [
+            "前提 Redis に接続できない",
+            "もし \"alice\" が正しいパスワードでログインする",
+            "ならば ログインに成功する"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "f-reset",
+      "name": "Failure counter reset",
+      "file": "tests/features/login_reset.feature",
+      "scenarios": [
+        {
+          "id": "s-reset",
+          "name": "Successful login resets the counter",
+          "verifies": [
+            "REQ-003"
+          ],
+          "steps": [
+            "Given \"alice\" has failed to log in 3 times",
+            "When \"alice\" logs in with the correct password",
+            "Then the failure counter of \"alice\" is 0",
+            {
+              "text": "And the counter keys are",
+              "table": [
+                [
+                  "key",
+                  "value"
+                ],
+                [
+                  "fail:acct:alice",
+                  "(none)"
+                ]
+              ]
+            }
+          ]
+        }
+      ]
     }
   ]
 }
