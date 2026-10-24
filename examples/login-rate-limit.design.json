@@ -1,0 +1,476 @@
+{
+  "meta": {
+    "title": "ログイン試行回数制限",
+    "summary": "総当たり攻撃対策として、ログイン失敗が続いたアカウントとIPを一時ロックする",
+    "status": "review",
+    "updated": "2026-10-24",
+    "author": "yasai"
+  },
+  "overview": {
+    "goal": "ログインの総当たり攻撃を、正規ユーザーの体験をほぼ変えずに防ぐ",
+    "tldr": [
+      "失敗回数を **Redis** で数え、閾値を超えたら一定時間ロック",
+      "判定は既存の `AuthService` の手前に `RateLimiter` を挟むだけ",
+      "ロック状態は 429 + `Retry-After` で返し、画面に残り時間を出す"
+    ],
+    "background": "先月、特定アカウントへの大量ログイン試行が観測された。\n現状は失敗回数の制限がなく、パスワードを総当たりされうる。",
+    "constraints": [
+      "既存のログインAPIのレスポンス形式は変えない（429 の追加のみ）",
+      "Redis は既にセッション用に稼働中のものを使う",
+      "p95 レイテンシの増加は 10ms 以内"
+    ],
+    "nonGoals": [
+      "CAPTCHA の導入（別チケット）",
+      "管理画面からのロック解除 UI"
+    ]
+  },
+  "layers": [
+    "画面",
+    "API",
+    "ドメイン",
+    "データ"
+  ],
+  "actors": [
+    {
+      "id": "user",
+      "name": "ユーザー"
+    }
+  ],
+  "components": [
+    {
+      "id": "login-page",
+      "name": "ログイン画面",
+      "layer": "画面",
+      "kind": "screen",
+      "status": "changed",
+      "summary": "429 のとき残り時間を表示する",
+      "files": [
+        "web/src/pages/Login.tsx"
+      ],
+      "responsibilities": [
+        "ID/パスワード入力",
+        "エラーとロック残り時間の表示"
+      ]
+    },
+    {
+      "id": "auth-controller",
+      "name": "AuthController",
+      "layer": "API",
+      "kind": "module",
+      "status": "changed",
+      "summary": "POST /login の入口。判定を RateLimiter に委譲",
+      "files": [
+        "api/src/auth/auth.controller.ts"
+      ],
+      "detail": "ロック中は認証処理を呼ばずに 429 を返す。\n```ts\nif (await limiter.isLocked(key)) throw new TooManyRequests(retryAfter)\n```"
+    },
+    {
+      "id": "rate-limiter",
+      "name": "RateLimiter",
+      "layer": "ドメイン",
+      "kind": "module",
+      "status": "new",
+      "summary": "失敗回数を数え、ロック判定する",
+      "files": [
+        "api/src/auth/rate-limiter.ts",
+        "api/src/auth/rate-limiter.test.ts"
+      ],
+      "responsibilities": [
+        "キー（アカウント / IP）ごとの失敗回数カウント",
+        "閾値超過でロックを設定",
+        "成功時にカウントをリセット"
+      ],
+      "detail": "- アカウント: 5回失敗で 15分ロック\n- IP: 30回失敗で 15分ロック\n- 閾値は環境変数で変更可能"
+    },
+    {
+      "id": "auth-service",
+      "name": "AuthService",
+      "layer": "ドメイン",
+      "kind": "module",
+      "status": "existing",
+      "summary": "パスワード照合とセッション発行（変更なし）",
+      "files": [
+        "api/src/auth/auth.service.ts"
+      ]
+    },
+    {
+      "id": "redis",
+      "name": "Redis",
+      "layer": "データ",
+      "kind": "cache",
+      "status": "existing",
+      "summary": "失敗カウンタとロックを TTL 付きで保持"
+    },
+    {
+      "id": "users-db",
+      "name": "users テーブル",
+      "layer": "データ",
+      "kind": "db",
+      "status": "changed",
+      "summary": "最終ロック日時のカラムを追加"
+    },
+    {
+      "id": "audit-log",
+      "name": "監査ログ",
+      "layer": "データ",
+      "kind": "external",
+      "status": "existing",
+      "summary": "ロック発生を記録する外部サービス"
+    }
+  ],
+  "edges": [
+    {
+      "from": "login-page",
+      "to": "auth-controller",
+      "label": "POST /login"
+    },
+    {
+      "from": "auth-controller",
+      "to": "rate-limiter",
+      "label": "判定・記録"
+    },
+    {
+      "from": "auth-controller",
+      "to": "auth-service",
+      "label": "認証"
+    },
+    {
+      "from": "rate-limiter",
+      "to": "redis",
+      "label": "INCR / TTL"
+    },
+    {
+      "from": "rate-limiter",
+      "to": "audit-log",
+      "label": "ロック通知"
+    },
+    {
+      "from": "auth-service",
+      "to": "users-db",
+      "label": "照合"
+    }
+  ],
+  "flows": [
+    {
+      "id": "login-fail",
+      "name": "失敗してロックされる",
+      "summary": "5回目の失敗でアカウントがロックされるまで",
+      "steps": [
+        {
+          "from": "user",
+          "to": "login-page",
+          "label": "誤ったパスワードで送信"
+        },
+        {
+          "from": "login-page",
+          "to": "auth-controller",
+          "label": "POST /login"
+        },
+        {
+          "from": "auth-controller",
+          "to": "rate-limiter",
+          "label": "isLocked(account, ip)",
+          "detail": "Redis の `lock:acct:{id}` と `lock:ip:{ip}` の存在を確認。どちらもなければ続行。"
+        },
+        {
+          "from": "auth-controller",
+          "to": "auth-service",
+          "label": "authenticate()"
+        },
+        {
+          "from": "auth-service",
+          "to": "auth-controller",
+          "label": "失敗",
+          "reply": true
+        },
+        {
+          "from": "auth-controller",
+          "to": "rate-limiter",
+          "label": "recordFailure()",
+          "detail": "`INCR fail:acct:{id}`（初回は `EXPIRE 900`）。\n5 以上なら `SET lock:acct:{id} 1 EX 900`。"
+        },
+        {
+          "from": "rate-limiter",
+          "to": "audit-log",
+          "label": "ロック発生を記録"
+        },
+        {
+          "from": "auth-controller",
+          "to": "login-page",
+          "label": "401（5回目は 429）",
+          "reply": true
+        },
+        {
+          "from": "login-page",
+          "to": "user",
+          "label": "残り時間を表示",
+          "reply": true
+        }
+      ]
+    },
+    {
+      "id": "login-ok",
+      "name": "成功してリセット",
+      "summary": "ロック前に成功した場合はカウントを消す",
+      "steps": [
+        {
+          "from": "login-page",
+          "to": "auth-controller",
+          "label": "POST /login"
+        },
+        {
+          "from": "auth-controller",
+          "to": "rate-limiter",
+          "label": "isLocked()"
+        },
+        {
+          "from": "auth-controller",
+          "to": "auth-service",
+          "label": "authenticate()"
+        },
+        {
+          "from": "auth-service",
+          "to": "auth-controller",
+          "label": "成功",
+          "reply": true
+        },
+        {
+          "from": "auth-controller",
+          "to": "rate-limiter",
+          "label": "reset(account)",
+          "detail": "`DEL fail:acct:{id}`。IP のカウントは消さない（共有IP対策）。"
+        },
+        {
+          "from": "auth-controller",
+          "to": "login-page",
+          "label": "200 + セッション",
+          "reply": true
+        }
+      ]
+    }
+  ],
+  "entities": [
+    {
+      "id": "user",
+      "name": "users",
+      "status": "changed",
+      "summary": "既存のユーザーテーブル",
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "key": true
+        },
+        {
+          "name": "email",
+          "type": "text"
+        },
+        {
+          "name": "password_hash",
+          "type": "text"
+        },
+        {
+          "name": "last_locked_at",
+          "type": "timestamptz?",
+          "status": "new",
+          "note": "最後にロックされた日時（調査用）"
+        }
+      ]
+    },
+    {
+      "id": "fail-counter",
+      "name": "fail:acct:{id}（Redis）",
+      "status": "new",
+      "summary": "失敗回数。TTL 15分",
+      "fields": [
+        {
+          "name": "value",
+          "type": "int",
+          "note": "失敗回数"
+        },
+        {
+          "name": "TTL",
+          "type": "900s",
+          "note": "最初の失敗から15分"
+        }
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "from": "user",
+      "to": "fail-counter",
+      "type": "1:0..1",
+      "label": "ユーザーごとに1つ"
+    }
+  ],
+  "apis": [
+    {
+      "id": "post-login",
+      "method": "POST",
+      "path": "/api/login",
+      "status": "changed",
+      "component": "auth-controller",
+      "summary": "ログイン（429 を追加）",
+      "request": "{ \"email\": \"a@example.com\", \"password\": \"...\" }",
+      "response": "200 { \"token\": \"...\" }\n401 { \"error\": \"invalid_credentials\" }\n429 { \"error\": \"locked\", \"retryAfter\": 812 }  + Retry-After ヘッダ",
+      "errors": [
+        "401: 認証失敗（回数を記録）",
+        "429: ロック中（認証処理は実行しない）"
+      ]
+    },
+    {
+      "id": "limiter-if",
+      "signature": "RateLimiter.recordFailure(key: LimitKey): Promise<LockState>",
+      "component": "rate-limiter",
+      "summary": "失敗を記録しロック状態を返す",
+      "response": "{ locked: boolean, retryAfterSec: number }"
+    }
+  ],
+  "decisions": [
+    {
+      "title": "カウンタの保存先",
+      "status": "decided",
+      "chosen": "Redis（INCR + TTL）",
+      "reason": "TTL で自動的に消えるため後片付けが不要。既存の Redis を使えて追加インフラなし。",
+      "alternatives": [
+        {
+          "name": "Redis",
+          "pros": [
+            "TTL で自動失効",
+            "高速・アトミック"
+          ],
+          "cons": [
+            "Redis 障害時に制限が効かない"
+          ]
+        },
+        {
+          "name": "users テーブルに列追加",
+          "pros": [
+            "永続化される"
+          ],
+          "cons": [
+            "ログインごとに DB 書き込み",
+            "失効処理が必要"
+          ]
+        },
+        {
+          "name": "アプリのメモリ",
+          "pros": [
+            "最も簡単"
+          ],
+          "cons": [
+            "複数台構成で共有できない"
+          ]
+        }
+      ],
+      "id": "d-store"
+    },
+    {
+      "title": "Redis 障害時の挙動",
+      "status": "proposed",
+      "chosen": "fail-open（制限なしでログインは通す）",
+      "reason": "ログイン不能になる影響の方が大きいと判断。障害はアラートで検知する。",
+      "id": "d-failopen"
+    }
+  ],
+  "risks": [
+    {
+      "title": "共有IP（社内NATなど）で無関係なユーザーがロックされる",
+      "level": "mid",
+      "mitigation": "IP の閾値はアカウントより高く（30回）設定",
+      "id": "r-shared-ip"
+    },
+    {
+      "title": "攻撃者が他人のアカウントを意図的にロックできる",
+      "level": "high",
+      "mitigation": "ロックは15分で自動解除。将来 CAPTCHA で緩和",
+      "id": "r-lockout"
+    },
+    {
+      "title": "Redis 障害時に制限が無効になる",
+      "level": "low",
+      "mitigation": "fail-open とし、監視アラートを追加",
+      "id": "r-redis-down"
+    }
+  ],
+  "questions": [
+    {
+      "q": "閾値 5回 / 15分 でよいか",
+      "context": "一般的な値だが、サポート問い合わせが増える可能性",
+      "owner": "PdM",
+      "options": [
+        "5回/15分",
+        "10回/30分"
+      ],
+      "id": "q-threshold"
+    },
+    {
+      "q": "ロック時にユーザーへメール通知するか",
+      "owner": "セキュリティ担当",
+      "id": "q-mail"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t1",
+      "title": "RateLimiter を実装",
+      "size": "M",
+      "components": [
+        "rate-limiter"
+      ],
+      "files": [
+        "api/src/auth/rate-limiter.ts"
+      ],
+      "detail": "- `isLocked` / `recordFailure` / `reset` の3メソッド\n- 閾値は `LOGIN_MAX_FAIL` などの環境変数から",
+      "done_when": "単体テストで 5回目にロック、15分後に解除されることを確認"
+    },
+    {
+      "id": "t2",
+      "title": "AuthController に組み込み",
+      "size": "S",
+      "dependsOn": [
+        "t1"
+      ],
+      "components": [
+        "auth-controller"
+      ],
+      "files": [
+        "api/src/auth/auth.controller.ts"
+      ]
+    },
+    {
+      "id": "t3",
+      "title": "users に last_locked_at を追加",
+      "size": "S",
+      "components": [
+        "users-db"
+      ],
+      "files": [
+        "api/migrations/20261024_add_last_locked_at.sql"
+      ]
+    },
+    {
+      "id": "t4",
+      "title": "ログイン画面で 429 を表示",
+      "size": "S",
+      "dependsOn": [
+        "t2"
+      ],
+      "components": [
+        "login-page"
+      ]
+    },
+    {
+      "id": "t5",
+      "title": "結合テストと負荷確認",
+      "size": "M",
+      "dependsOn": [
+        "t2",
+        "t3",
+        "t4"
+      ],
+      "done_when": "p95 の増加が 10ms 以内"
+    }
+  ]
+}

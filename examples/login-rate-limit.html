@@ -1,0 +1,1278 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>設計ビューア</title>
+<!--
+  設計ビューア テンプレート
+  このファイルは編集しない。データは下の <script id="design-data"> の中身だけを差し替える。
+  （scripts/build.js が自動で差し替える）
+-->
+<style>
+:root{
+  --bg:#f6f6f3; --panel:#ffffff; --ink:#1d1d1f; --sub:#62666d; --faint:#9a9ea5; --line:#e2e2dd; --soft:#f0f0ec;
+  --accent:#2f6fde; --accent-soft:#e7eefc;
+  --new:#1f9d55; --new-soft:#e2f4e9; --chg:#b9770e; --chg-soft:#fbf0db; --old:#7a7f87; --old-soft:#eff0f2;
+  --hi:#d93025; --hi-soft:#fde8e6; --mid:#d48a00; --mid-soft:#fdf2dc; --lo:#4f8a3a; --lo-soft:#e7f2e2;
+  --mono:ui-monospace,SFMono-Regular,Consolas,"Cascadia Code",Menlo,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#151619; --panel:#1e1f23; --ink:#e7e7ea; --sub:#a3a7ae; --faint:#71757c; --line:#32343a; --soft:#26282d;
+  --accent:#7ea9ff; --accent-soft:#233149;
+  --new:#4cc38a; --new-soft:#1b3326; --chg:#efb34a; --chg-soft:#3a2e18; --old:#9aa0a8; --old-soft:#292c31;
+  --hi:#ff7b6e; --hi-soft:#3d2120; --mid:#f2b84b; --mid-soft:#3a3019; --lo:#8cc66f; --lo-soft:#22301c;
+}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.65 system-ui,-apple-system,"Segoe UI","Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif}
+button{font:inherit;color:inherit}
+code{font-family:var(--mono);font-size:.9em;background:var(--soft);padding:1px 5px;border-radius:5px}
+pre{background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:10px 12px;overflow:auto;margin:8px 0}
+pre code{background:none;padding:0;font-size:12.5px;line-height:1.55}
+p{margin:6px 0} ul{margin:6px 0;padding-left:20px} li{margin:2px 0}
+h1,h2,h3{line-height:1.35}
+
+/* ---------- header ---------- */
+header{position:sticky;top:0;z-index:20;background:var(--panel);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.ttl{flex:1 1 280px;min-width:0}
+.ttl h1{font-size:17px;margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ttl .sum{color:var(--sub);font-size:13px;margin-top:1px}
+.tools{display:flex;gap:8px;align-items:center;flex:0 1 auto;width:min(100%,540px)}
+#q{flex:1;min-width:0;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+#q:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 10px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.warn{background:var(--mid-soft);border-bottom:1px solid var(--line);padding:8px 16px;font-size:13px}
+.warn summary{cursor:pointer;font-weight:600}
+
+/* ---------- layout ---------- */
+.wrap{display:grid;grid-template-columns:190px minmax(0,1fr);gap:0;max-width:1280px;margin:0 auto}
+nav{position:sticky;top:64px;align-self:start;padding:16px 8px 16px 16px;display:flex;flex-direction:column;gap:2px}
+nav button{display:flex;justify-content:space-between;align-items:center;gap:8px;text-align:left;border:0;background:none;padding:7px 10px;border-radius:8px;cursor:pointer;color:var(--sub)}
+nav button:hover{background:var(--soft);color:var(--ink)}
+nav button.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+nav .n{font-size:11px;background:var(--soft);color:var(--sub);border-radius:99px;padding:0 7px;min-width:22px;text-align:center}
+nav button.on .n{background:var(--panel)}
+nav .hint{margin-top:14px;padding:0 10px;font-size:11.5px;color:var(--faint);line-height:1.7}
+main{padding:16px 16px 80px;min-width:0}
+.sec-h{display:flex;align-items:baseline;gap:10px;margin:4px 0 12px}
+.sec-h h2{font-size:18px;margin:0}
+.sec-h .lead{color:var(--sub);font-size:13px}
+.sec+.sec{margin-top:28px}
+@media (max-width:760px){
+  .wrap{grid-template-columns:1fr}
+  nav{position:sticky;top:0;z-index:15;flex-direction:row;overflow-x:auto;padding:8px 12px;background:var(--bg);border-bottom:1px solid var(--line)}
+  nav button{flex:0 0 auto}
+  nav .hint{display:none}
+  header{position:relative}
+}
+
+/* ---------- common parts ---------- */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
+.cards{display:grid;gap:10px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.muted{color:var(--sub)} .small{font-size:12.5px}
+.lbl{font-size:11.5px;font-weight:600;color:var(--sub);letter-spacing:.04em;margin:10px 0 4px}
+.lbl:first-child{margin-top:0}
+.b{display:inline-block;font-size:11px;font-weight:600;line-height:1.6;padding:0 8px;border-radius:99px;background:var(--soft);color:var(--sub);white-space:nowrap;vertical-align:middle}
+.b.new{background:var(--new-soft);color:var(--new)} .b.changed{background:var(--chg-soft);color:var(--chg)} .b.existing{background:var(--old-soft);color:var(--old)}
+.b.high{background:var(--hi-soft);color:var(--hi)} .b.mid{background:var(--mid-soft);color:var(--mid)} .b.low{background:var(--lo-soft);color:var(--lo)}
+.b.draft{background:var(--soft)} .b.review{background:var(--mid-soft);color:var(--mid)} .b.approved,.b.decided{background:var(--new-soft);color:var(--new)} .b.proposed{background:var(--mid-soft);color:var(--mid)}
+.chip{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);background:var(--panel);border-radius:99px;padding:0 9px;font-size:12px;line-height:22px;margin:2px 4px 2px 0;cursor:pointer;white-space:nowrap}
+.chip:hover{border-color:var(--accent);color:var(--accent)}
+.chip.missing{border-style:dashed;color:var(--faint);cursor:default}
+.chip.missing:hover{border-color:var(--line);color:var(--faint)}
+.click{cursor:pointer;transition:border-color .12s}
+.click:hover{border-color:var(--accent)}
+details>summary{cursor:pointer;list-style:none;color:var(--accent);font-size:12.5px;margin-top:6px;user-select:none}
+details>summary::-webkit-details-marker{display:none}
+details>summary::before{content:"▸ ";display:inline-block;transition:transform .12s}
+details[open]>summary::before{transform:rotate(90deg)}
+details>.dbody{margin-top:6px;padding-left:12px;border-left:2px solid var(--line)}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--sub);font-weight:600;font-size:11.5px}
+.empty{color:var(--faint);padding:24px;text-align:center}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--sub);align-items:center;margin-bottom:8px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;border:1.5px solid;vertical-align:-2px;margin-right:4px}
+.diagram{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:8px;overflow-x:auto}
+.diagram svg{display:block;height:auto}
+
+/* ---------- overview ---------- */
+.hero .goal{font-size:16px;font-weight:600;margin:2px 0 8px}
+.hero ul{margin:0;padding-left:0;list-style:none}
+.hero li{padding:4px 0 4px 22px;position:relative}
+.hero li::before{content:"";position:absolute;left:6px;top:12px;width:7px;height:7px;border-radius:50%;background:var(--accent)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:10px 0}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;cursor:pointer;text-align:left}
+.tile:hover{border-color:var(--accent)}
+.tile .v{font-size:22px;font-weight:700;line-height:1.2}
+.tile .k{font-size:12px;color:var(--sub)}
+.tile .s{font-size:11.5px;color:var(--faint)}
+.tile.alert .v{color:var(--hi)}
+
+/* ---------- architecture svg ---------- */
+.arch .band{fill:var(--soft);opacity:.55}
+.arch .layer{fill:var(--faint);font-size:11.5px;font-weight:600}
+.arch .node{cursor:pointer}
+.arch .node rect{fill:var(--panel);stroke:var(--line);stroke-width:1.5}
+.arch .node.st-new rect{fill:var(--new-soft);stroke:var(--new)}
+.arch .node.st-changed rect{fill:var(--chg-soft);stroke:var(--chg)}
+.arch .node.st-existing rect{fill:var(--old-soft);stroke:var(--old)}
+.arch .node.k-external rect{stroke-dasharray:5 4}
+.arch .node .nm{fill:var(--ink);font-size:13px;font-weight:600}
+.arch .node .kd{fill:var(--sub);font-size:11px}
+.arch .node:hover rect{stroke:var(--accent);stroke-width:2}
+.arch .edge path{fill:none;stroke:var(--faint);stroke-width:1.4}
+.arch .edge text{fill:var(--sub);font-size:11px}
+.arch .edge .lb{fill:var(--panel);stroke:var(--line);stroke-width:1}
+.arch .node,.arch .edge{transition:opacity .15s}
+.arch.focus .node:not(.on),.arch.focus .edge:not(.on){opacity:.18}
+.arch.focus .edge.on path{stroke:var(--accent);stroke-width:2}
+.arch.focus .edge.on text{fill:var(--accent)}
+.arch.focus .edge.on .lb{stroke:var(--accent)}
+svg .mk{fill:var(--faint)}
+.cl-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.cl-row b{font-size:14px}
+
+/* ---------- sequence ---------- */
+.pills{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.pill{border:1px solid var(--line);background:var(--panel);border-radius:99px;padding:4px 12px;cursor:pointer;font-size:13px}
+.pill.on{background:var(--accent);border-color:var(--accent);color:var(--panel)}
+.seq .life{stroke:var(--line);stroke-dasharray:4 4}
+.seq .pt rect{fill:var(--panel);stroke:var(--line);stroke-width:1.5}
+.seq .pt text{fill:var(--ink);font-size:12.5px;font-weight:600}
+.seq .pt.ref{cursor:pointer}
+.seq .pt.on rect{stroke:var(--accent);fill:var(--accent-soft)}
+.seq .st{cursor:pointer}
+.seq .st line,.seq .st path{stroke:var(--faint);stroke-width:1.4;fill:none}
+.seq .st.reply line,.seq .st.reply path{stroke-dasharray:5 4}
+.seq .st text{fill:var(--sub);font-size:11.5px}
+.seq .st .hit{fill:transparent;stroke:none}
+.seq .st:hover text{fill:var(--ink)}
+.seq .st.cur line,.seq .st.cur path{stroke:var(--accent);stroke-width:2.2}
+.seq .st.cur text{fill:var(--accent);font-weight:700}
+.seq .mk-cur{fill:var(--accent)}
+.stepper{display:flex;align-items:center;gap:10px;margin:10px 0}
+.stepper .pos{font-variant-numeric:tabular-nums;color:var(--sub);font-size:13px;min-width:80px;text-align:center}
+.stepd .head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--accent);color:var(--panel);font-size:12px;font-weight:700;flex:0 0 auto}
+.stepd .lab{font-weight:600;font-size:15px;margin:6px 0 2px}
+
+/* ---------- api / decisions / tasks ---------- */
+.m{font-family:var(--mono);font-size:11px;font-weight:700;padding:1px 7px;border-radius:5px;background:var(--soft);color:var(--sub)}
+.m.GET{background:var(--new-soft);color:var(--new)} .m.POST{background:var(--accent-soft);color:var(--accent)}
+.m.PUT,.m.PATCH{background:var(--chg-soft);color:var(--chg)} .m.DELETE{background:var(--hi-soft);color:var(--hi)}
+.api-h{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chosen{background:var(--new-soft);border-radius:8px;padding:8px 10px;margin:8px 0}
+.chosen .k{font-size:11.5px;color:var(--new);font-weight:700}
+.alts{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px}
+.alt{border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.pro,.con{list-style:none;padding:0;margin:4px 0;font-size:12.5px}
+.pro li::before{content:"＋ ";color:var(--new);font-weight:700}
+.con li::before{content:"－ ";color:var(--hi);font-weight:700}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:2px}
+.dot.high{background:var(--hi)} .dot.mid{background:var(--mid)} .dot.low{background:var(--lo)}
+.chkrow{display:flex;gap:10px;align-items:flex-start}
+.chkrow input{margin-top:5px;width:16px;height:16px;accent-color:var(--accent);flex:0 0 auto;cursor:pointer}
+.chkrow .body{flex:1;min-width:0}
+.done .t{text-decoration:line-through;color:var(--faint)}
+.prog{height:6px;background:var(--line);border-radius:99px;overflow:hidden;margin:4px 0 12px}
+.prog i{display:block;height:100%;background:var(--accent);transition:width .2s}
+.tnum{color:var(--faint);font-variant-numeric:tabular-nums;font-size:12px;margin-right:4px}
+
+/* ---------- drawer ---------- */
+#scrim{position:fixed;inset:0;background:rgba(0,0,0,.25);opacity:0;pointer-events:none;transition:opacity .15s;z-index:30}
+#scrim.on{opacity:1;pointer-events:auto}
+#drawer{position:fixed;top:0;right:0;bottom:0;width:min(440px,100%);background:var(--panel);border-left:1px solid var(--line);z-index:31;transform:translateX(102%);transition:transform .18s ease;display:flex;flex-direction:column;box-shadow:-8px 0 24px rgba(0,0,0,.08)}
+#drawer.on{transform:none}
+.dw-head{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--line)}
+.dw-head .k{font-size:12px;color:var(--sub);font-weight:600}
+#dw-body{padding:14px 16px 40px;overflow:auto}
+#dw-body h3{margin:0 0 4px;font-size:18px}
+.hit-n{color:var(--sub);font-size:13px;margin-bottom:10px}
+
+/* ---------- notes ---------- */
+.nb{border:0;background:none;cursor:pointer;color:var(--faint);font-size:13px;padding:0 5px;border-radius:5px;line-height:1.5;margin-left:auto;flex:0 0 auto}
+.nb:hover{color:var(--accent);background:var(--accent-soft)}
+.nb.has{color:var(--panel);background:var(--mid)}
+.hero>.nb{float:right}
+.path{font-family:var(--mono);font-size:11px;color:var(--faint);word-break:break-all}
+.note-ta{width:100%;min-height:110px;font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);resize:vertical}
+.note-ta:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--panel)}
+.btn.pri:hover{color:var(--panel);opacity:.9}
+.btn:disabled{opacity:.45;cursor:default}
+.nl{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:6px 0}
+.nl.stale{opacity:.55}
+.nl .txt{white-space:pre-wrap;margin-top:2px}
+#seltip{position:fixed;z-index:40;display:none;padding:4px 10px;font-size:12.5px;box-shadow:0 4px 14px rgba(0,0,0,.18)}
+#seltip .pp{font-family:var(--mono);font-size:10.5px;opacity:.8;margin-left:6px}
+</style>
+</head>
+<body>
+<header>
+  <div class="ttl"><h1 id="h-title"></h1><div class="sum" id="h-sum"></div></div>
+  <div class="tools">
+    <input id="q" type="search" placeholder="検索（ / ）" autocomplete="off">
+    <button class="btn" id="notesBtn" title="✎ で書いた修正メモの一覧・コピー">修正依頼<span id="notesN"></span></button>
+    <button class="btn" id="toggleAll" title="折りたたみをまとめて開閉">すべて展開</button>
+  </div>
+</header>
+<div id="warn"></div>
+<div class="wrap">
+  <nav id="nav"></nav>
+  <main id="main"></main>
+</div>
+<button id="seltip" class="btn pri" type="button">✎ この箇所にメモ<span class="pp"></span></button>
+<div id="scrim"></div>
+<aside id="drawer" aria-hidden="true">
+  <div class="dw-head"><span class="k" id="dw-kind"></span><button class="btn" id="dw-close" aria-label="閉じる">✕</button></div>
+  <div id="dw-body"></div>
+</aside>
+
+<script type="application/json" id="design-data">
+{
+ "meta": {
+  "title": "ログイン試行回数制限",
+  "summary": "総当たり攻撃対策として、ログイン失敗が続いたアカウントとIPを一時ロックする",
+  "status": "review",
+  "updated": "2026-10-24",
+  "author": "yasai"
+ },
+ "overview": {
+  "goal": "ログインの総当たり攻撃を、正規ユーザーの体験をほぼ変えずに防ぐ",
+  "tldr": [
+   "失敗回数を **Redis** で数え、閾値を超えたら一定時間ロック",
+   "判定は既存の `AuthService` の手前に `RateLimiter` を挟むだけ",
+   "ロック状態は 429 + `Retry-After` で返し、画面に残り時間を出す"
+  ],
+  "background": "先月、特定アカウントへの大量ログイン試行が観測された。\n現状は失敗回数の制限がなく、パスワードを総当たりされうる。",
+  "constraints": [
+   "既存のログインAPIのレスポンス形式は変えない（429 の追加のみ）",
+   "Redis は既にセッション用に稼働中のものを使う",
+   "p95 レイテンシの増加は 10ms 以内"
+  ],
+  "nonGoals": [
+   "CAPTCHA の導入（別チケット）",
+   "管理画面からのロック解除 UI"
+  ]
+ },
+ "layers": [
+  "画面",
+  "API",
+  "ドメイン",
+  "データ"
+ ],
+ "actors": [
+  {
+   "id": "user",
+   "name": "ユーザー"
+  }
+ ],
+ "components": [
+  {
+   "id": "login-page",
+   "name": "ログイン画面",
+   "layer": "画面",
+   "kind": "screen",
+   "status": "changed",
+   "summary": "429 のとき残り時間を表示する",
+   "files": [
+    "web/src/pages/Login.tsx"
+   ],
+   "responsibilities": [
+    "ID/パスワード入力",
+    "エラーとロック残り時間の表示"
+   ]
+  },
+  {
+   "id": "auth-controller",
+   "name": "AuthController",
+   "layer": "API",
+   "kind": "module",
+   "status": "changed",
+   "summary": "POST /login の入口。判定を RateLimiter に委譲",
+   "files": [
+    "api/src/auth/auth.controller.ts"
+   ],
+   "detail": "ロック中は認証処理を呼ばずに 429 を返す。\n```ts\nif (await limiter.isLocked(key)) throw new TooManyRequests(retryAfter)\n```"
+  },
+  {
+   "id": "rate-limiter",
+   "name": "RateLimiter",
+   "layer": "ドメイン",
+   "kind": "module",
+   "status": "new",
+   "summary": "失敗回数を数え、ロック判定する",
+   "files": [
+    "api/src/auth/rate-limiter.ts",
+    "api/src/auth/rate-limiter.test.ts"
+   ],
+   "responsibilities": [
+    "キー（アカウント / IP）ごとの失敗回数カウント",
+    "閾値超過でロックを設定",
+    "成功時にカウントをリセット"
+   ],
+   "detail": "- アカウント: 5回失敗で 15分ロック\n- IP: 30回失敗で 15分ロック\n- 閾値は環境変数で変更可能"
+  },
+  {
+   "id": "auth-service",
+   "name": "AuthService",
+   "layer": "ドメイン",
+   "kind": "module",
+   "status": "existing",
+   "summary": "パスワード照合とセッション発行（変更なし）",
+   "files": [
+    "api/src/auth/auth.service.ts"
+   ]
+  },
+  {
+   "id": "redis",
+   "name": "Redis",
+   "layer": "データ",
+   "kind": "cache",
+   "status": "existing",
+   "summary": "失敗カウンタとロックを TTL 付きで保持"
+  },
+  {
+   "id": "users-db",
+   "name": "users テーブル",
+   "layer": "データ",
+   "kind": "db",
+   "status": "changed",
+   "summary": "最終ロック日時のカラムを追加"
+  },
+  {
+   "id": "audit-log",
+   "name": "監査ログ",
+   "layer": "データ",
+   "kind": "external",
+   "status": "existing",
+   "summary": "ロック発生を記録する外部サービス"
+  }
+ ],
+ "edges": [
+  {
+   "from": "login-page",
+   "to": "auth-controller",
+   "label": "POST /login"
+  },
+  {
+   "from": "auth-controller",
+   "to": "rate-limiter",
+   "label": "判定・記録"
+  },
+  {
+   "from": "auth-controller",
+   "to": "auth-service",
+   "label": "認証"
+  },
+  {
+   "from": "rate-limiter",
+   "to": "redis",
+   "label": "INCR / TTL"
+  },
+  {
+   "from": "rate-limiter",
+   "to": "audit-log",
+   "label": "ロック通知"
+  },
+  {
+   "from": "auth-service",
+   "to": "users-db",
+   "label": "照合"
+  }
+ ],
+ "flows": [
+  {
+   "id": "login-fail",
+   "name": "失敗してロックされる",
+   "summary": "5回目の失敗でアカウントがロックされるまで",
+   "steps": [
+    {
+     "from": "user",
+     "to": "login-page",
+     "label": "誤ったパスワードで送信"
+    },
+    {
+     "from": "login-page",
+     "to": "auth-controller",
+     "label": "POST /login"
+    },
+    {
+     "from": "auth-controller",
+     "to": "rate-limiter",
+     "label": "isLocked(account, ip)",
+     "detail": "Redis の `lock:acct:{id}` と `lock:ip:{ip}` の存在を確認。どちらもなければ続行。"
+    },
+    {
+     "from": "auth-controller",
+     "to": "auth-service",
+     "label": "authenticate()"
+    },
+    {
+     "from": "auth-service",
+     "to": "auth-controller",
+     "label": "失敗",
+     "reply": true
+    },
+    {
+     "from": "auth-controller",
+     "to": "rate-limiter",
+     "label": "recordFailure()",
+     "detail": "`INCR fail:acct:{id}`（初回は `EXPIRE 900`）。\n5 以上なら `SET lock:acct:{id} 1 EX 900`。"
+    },
+    {
+     "from": "rate-limiter",
+     "to": "audit-log",
+     "label": "ロック発生を記録"
+    },
+    {
+     "from": "auth-controller",
+     "to": "login-page",
+     "label": "401（5回目は 429）",
+     "reply": true
+    },
+    {
+     "from": "login-page",
+     "to": "user",
+     "label": "残り時間を表示",
+     "reply": true
+    }
+   ]
+  },
+  {
+   "id": "login-ok",
+   "name": "成功してリセット",
+   "summary": "ロック前に成功した場合はカウントを消す",
+   "steps": [
+    {
+     "from": "login-page",
+     "to": "auth-controller",
+     "label": "POST /login"
+    },
+    {
+     "from": "auth-controller",
+     "to": "rate-limiter",
+     "label": "isLocked()"
+    },
+    {
+     "from": "auth-controller",
+     "to": "auth-service",
+     "label": "authenticate()"
+    },
+    {
+     "from": "auth-service",
+     "to": "auth-controller",
+     "label": "成功",
+     "reply": true
+    },
+    {
+     "from": "auth-controller",
+     "to": "rate-limiter",
+     "label": "reset(account)",
+     "detail": "`DEL fail:acct:{id}`。IP のカウントは消さない（共有IP対策）。"
+    },
+    {
+     "from": "auth-controller",
+     "to": "login-page",
+     "label": "200 + セッション",
+     "reply": true
+    }
+   ]
+  }
+ ],
+ "entities": [
+  {
+   "id": "user",
+   "name": "users",
+   "status": "changed",
+   "summary": "既存のユーザーテーブル",
+   "fields": [
+    {
+     "name": "id",
+     "type": "uuid",
+     "key": true
+    },
+    {
+     "name": "email",
+     "type": "text"
+    },
+    {
+     "name": "password_hash",
+     "type": "text"
+    },
+    {
+     "name": "last_locked_at",
+     "type": "timestamptz?",
+     "status": "new",
+     "note": "最後にロックされた日時（調査用）"
+    }
+   ]
+  },
+  {
+   "id": "fail-counter",
+   "name": "fail:acct:{id}（Redis）",
+   "status": "new",
+   "summary": "失敗回数。TTL 15分",
+   "fields": [
+    {
+     "name": "value",
+     "type": "int",
+     "note": "失敗回数"
+    },
+    {
+     "name": "TTL",
+     "type": "900s",
+     "note": "最初の失敗から15分"
+    }
+   ]
+  }
+ ],
+ "relations": [
+  {
+   "from": "user",
+   "to": "fail-counter",
+   "type": "1:0..1",
+   "label": "ユーザーごとに1つ"
+  }
+ ],
+ "apis": [
+  {
+   "id": "post-login",
+   "method": "POST",
+   "path": "/api/login",
+   "status": "changed",
+   "component": "auth-controller",
+   "summary": "ログイン（429 を追加）",
+   "request": "{ \"email\": \"a@example.com\", \"password\": \"...\" }",
+   "response": "200 { \"token\": \"...\" }\n401 { \"error\": \"invalid_credentials\" }\n429 { \"error\": \"locked\", \"retryAfter\": 812 }  + Retry-After ヘッダ",
+   "errors": [
+    "401: 認証失敗（回数を記録）",
+    "429: ロック中（認証処理は実行しない）"
+   ]
+  },
+  {
+   "id": "limiter-if",
+   "signature": "RateLimiter.recordFailure(key: LimitKey): Promise<LockState>",
+   "component": "rate-limiter",
+   "summary": "失敗を記録しロック状態を返す",
+   "response": "{ locked: boolean, retryAfterSec: number }"
+  }
+ ],
+ "decisions": [
+  {
+   "title": "カウンタの保存先",
+   "status": "decided",
+   "chosen": "Redis（INCR + TTL）",
+   "reason": "TTL で自動的に消えるため後片付けが不要。既存の Redis を使えて追加インフラなし。",
+   "alternatives": [
+    {
+     "name": "Redis",
+     "pros": [
+      "TTL で自動失効",
+      "高速・アトミック"
+     ],
+     "cons": [
+      "Redis 障害時に制限が効かない"
+     ]
+    },
+    {
+     "name": "users テーブルに列追加",
+     "pros": [
+      "永続化される"
+     ],
+     "cons": [
+      "ログインごとに DB 書き込み",
+      "失効処理が必要"
+     ]
+    },
+    {
+     "name": "アプリのメモリ",
+     "pros": [
+      "最も簡単"
+     ],
+     "cons": [
+      "複数台構成で共有できない"
+     ]
+    }
+   ],
+   "id": "d-store"
+  },
+  {
+   "title": "Redis 障害時の挙動",
+   "status": "proposed",
+   "chosen": "fail-open（制限なしでログインは通す）",
+   "reason": "ログイン不能になる影響の方が大きいと判断。障害はアラートで検知する。",
+   "id": "d-failopen"
+  }
+ ],
+ "risks": [
+  {
+   "title": "共有IP（社内NATなど）で無関係なユーザーがロックされる",
+   "level": "mid",
+   "mitigation": "IP の閾値はアカウントより高く（30回）設定",
+   "id": "r-shared-ip"
+  },
+  {
+   "title": "攻撃者が他人のアカウントを意図的にロックできる",
+   "level": "high",
+   "mitigation": "ロックは15分で自動解除。将来 CAPTCHA で緩和",
+   "id": "r-lockout"
+  },
+  {
+   "title": "Redis 障害時に制限が無効になる",
+   "level": "low",
+   "mitigation": "fail-open とし、監視アラートを追加",
+   "id": "r-redis-down"
+  }
+ ],
+ "questions": [
+  {
+   "q": "閾値 5回 / 15分 でよいか",
+   "context": "一般的な値だが、サポート問い合わせが増える可能性",
+   "owner": "PdM",
+   "options": [
+    "5回/15分",
+    "10回/30分"
+   ],
+   "id": "q-threshold"
+  },
+  {
+   "q": "ロック時にユーザーへメール通知するか",
+   "owner": "セキュリティ担当",
+   "id": "q-mail"
+  }
+ ],
+ "tasks": [
+  {
+   "id": "t1",
+   "title": "RateLimiter を実装",
+   "size": "M",
+   "components": [
+    "rate-limiter"
+   ],
+   "files": [
+    "api/src/auth/rate-limiter.ts"
+   ],
+   "detail": "- `isLocked` / `recordFailure` / `reset` の3メソッド\n- 閾値は `LOGIN_MAX_FAIL` などの環境変数から",
+   "done_when": "単体テストで 5回目にロック、15分後に解除されることを確認"
+  },
+  {
+   "id": "t2",
+   "title": "AuthController に組み込み",
+   "size": "S",
+   "dependsOn": [
+    "t1"
+   ],
+   "components": [
+    "auth-controller"
+   ],
+   "files": [
+    "api/src/auth/auth.controller.ts"
+   ]
+  },
+  {
+   "id": "t3",
+   "title": "users に last_locked_at を追加",
+   "size": "S",
+   "components": [
+    "users-db"
+   ],
+   "files": [
+    "api/migrations/20261024_add_last_locked_at.sql"
+   ]
+  },
+  {
+   "id": "t4",
+   "title": "ログイン画面で 429 を表示",
+   "size": "S",
+   "dependsOn": [
+    "t2"
+   ],
+   "components": [
+    "login-page"
+   ]
+  },
+  {
+   "id": "t5",
+   "title": "結合テストと負荷確認",
+   "size": "M",
+   "dependsOn": [
+    "t2",
+    "t3",
+    "t4"
+   ],
+   "done_when": "p95 の増加が 10ms 以内"
+  }
+ ],
+ "_source": "examples/login-rate-limit.design.json"
+}
+</script>
+
+<script>
+(function(){
+"use strict";
+/* ============ utils ============ */
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const arr=v=>Array.isArray(v)?v:(v==null||v===""?[]:[v]);
+const trunc=(s,n)=>{s=String(s??"");return s.length>n?s.slice(0,n-1)+"…":s;};
+const tw=(s,fs)=>{let w=0;for(const ch of String(s??"")){const c=ch.codePointAt(0);w+=c>0x2E7F?fs:ch===" "?fs*.3:/[A-Z0-9@%#&]/.test(ch)?fs*.66:fs*.55;}return w;};
+const fit=(s,px,fs)=>{s=String(s??"");if(tw(s,fs)<=px)return s;let o="";for(const ch of s){if(tw(o+ch+"…",fs)>px)break;o+=ch;}return o+"…";};
+function inline(s){return esc(s).replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>");}
+function md(s){
+  if(s==null||s==="")return "";
+  if(Array.isArray(s))s=s.map(x=>"- "+x).join("\n");
+  let out="";
+  String(s).split("```").forEach((part,i)=>{
+    if(i%2){const nl=part.indexOf("\n");const first=nl>=0?part.slice(0,nl).trim():"";
+      const code=(nl>=0&&/^[\w+#.-]*$/.test(first))?part.slice(nl+1):part;
+      out+=`<pre><code>${esc(code.replace(/\n$/,""))}</code></pre>`;return;}
+    let para=[],list=[];
+    const fp=()=>{if(para.length){out+=`<p>${para.map(inline).join("<br>")}</p>`;para=[];}};
+    const fl=()=>{if(list.length){out+=`<ul>${list.map(x=>`<li>${inline(x)}</li>`).join("")}</ul>`;list=[];}};
+    part.split("\n").forEach(ln=>{
+      const m=ln.match(/^\s*(?:[-*・]|\d+[.)])\s+(.*)$/);
+      if(m){fp();list.push(m[1]);}
+      else if(!ln.trim()){fp();fl();}
+      else{fl();para.push(ln);}
+    });fp();fl();
+  });
+  return out;
+}
+const qa=(...xs)=>` data-q="${esc(xs.flat(3).filter(x=>x!=null&&x!=="").map(x=>typeof x==="object"?JSON.stringify(x):String(x)).join(" ").toLowerCase())}"`;
+
+/* ============ data ============ */
+let D={},parseErr=null;
+try{D=JSON.parse($("#design-data").textContent)||{};}catch(e){parseErr=e;}
+const L=k=>arr(D[k]).filter(x=>x&&typeof x==="object");
+const meta=D.meta||{}, ov=D.overview||{};
+const comps=L("components"),edges=L("edges"),flows=L("flows"),ents=L("entities"),rels=L("relations"),
+      apis=L("apis"),decs=L("decisions"),risks=L("risks"),qs=L("questions"),tasks=L("tasks");
+const idx=a=>{const m={};a.forEach(x=>{if(x.id!=null&&!(x.id in m))m[x.id]=x;});return m;};
+const C=idx(comps),E=idx(ents),T=idx(tasks),ACT=idx(L("actors"));
+const nameOf=id=>(C[id]&&C[id].name)||(ACT[id]&&ACT[id].name)||id;
+const entName=id=>(E[id]&&E[id].name)||id;
+const ST={new:"新規",changed:"変更",existing:"既存"};
+const LV={high:"高",mid:"中",low:"低"};
+const MS={draft:"草案",review:"レビュー中",approved:"承認済"};
+const DS={decided:"決定",proposed:"提案中"};
+const KIND={service:"サービス",module:"モジュール",ui:"UI",screen:"画面",db:"DB",external:"外部",job:"ジョブ",lib:"ライブラリ",file:"ファイル",script:"スクリプト",queue:"キュー",cache:"キャッシュ",class:"クラス",function:"関数"};
+const badge=(cls,map)=>cls?`<span class="b ${esc(cls)}">${esc((map&&map[cls])||cls)}</span>`:"";
+const tKey=t=>"task:"+(t.id||t.title);
+const qKey=q=>"q:"+(q.id||q.q);
+
+/* ============ persistence (per viewer, optional) ============ */
+const SK="design-viewer:"+(meta.title||location.pathname);
+let store={};try{store=JSON.parse(localStorage.getItem(SK)||"{}")||{};}catch(e){store={};}
+const save=()=>{try{localStorage.setItem(SK,JSON.stringify(store));}catch(e){}};
+
+/* ============ validation ============ */
+const warns=[];
+if(parseErr)warns.push("JSON の解析に失敗しました: "+parseErr.message);
+else{
+  if(!meta.title)warns.push("meta.title がありません");
+  const dup=(a,n)=>{const s=new Set();a.forEach(x=>{if(x.id==null)return;if(s.has(x.id))warns.push(`${n}: id "${x.id}" が重複`);s.add(x.id);});};
+  dup(comps,"components");dup(ents,"entities");dup(tasks,"tasks");dup(flows,"flows");
+  comps.forEach((c,i)=>{if(c.id==null)warns.push(`components[${i}] に id がありません`);});
+  edges.forEach(e=>{if(!C[e.from])warns.push(`edges: from "${e.from}" が components にありません`);if(!C[e.to])warns.push(`edges: to "${e.to}" が components にありません`);});
+  rels.forEach(r=>{if(!E[r.from])warns.push(`relations: from "${r.from}" が entities にありません`);if(!E[r.to])warns.push(`relations: to "${r.to}" が entities にありません`);});
+  apis.forEach(a=>{if(a.component&&!C[a.component])warns.push(`apis: component "${a.component}" が components にありません`);});
+  tasks.forEach(t=>{arr(t.dependsOn).forEach(d=>{if(!T[d])warns.push(`tasks "${t.id}": dependsOn "${d}" が tasks にありません`);});
+    arr(t.components).forEach(c=>{if(!C[c])warns.push(`tasks "${t.id}": components "${c}" が components にありません`);});});
+}
+if(warns.length){
+  $("#warn").innerHTML=`<div class="warn"><details><summary>⚠ データの不整合 ${warns.length} 件（クリックで表示）</summary><ul>${warns.map(w=>`<li>${esc(w)}</li>`).join("")}</ul></details></div>`;
+  warns.forEach(w=>console.warn("[design-viewer]",w));
+}
+
+/* ============ header ============ */
+document.title=(meta.title||"設計")+" | 設計ビューア";
+$("#h-title").innerHTML=`${esc(meta.title||"（無題の設計）")} ${badge(meta.status,MS)}`;
+$("#h-sum").innerHTML=[meta.summary&&inline(meta.summary),meta.updated&&`更新 ${esc(meta.updated)}`,meta.author&&esc(meta.author)].filter(Boolean).join(" ・ ");
+
+/* ============ helpers for refs ============ */
+function ref(type,id){
+  const o=type==="comp"?C[id]:type==="ent"?E[id]:T[id];
+  const label=o?(o.name||o.title||id):id;
+  return o?`<button class="chip" data-ref="${type}:${esc(id)}">${esc(label)}</button>`
+          :`<span class="chip missing" title="未定義の参照">${esc(label)}</span>`;
+}
+const refs=(type,ids)=>arr(ids).map(id=>ref(type,id)).join("");
+let expandAll=false;
+const OPEN=()=>expandAll?" open":"";
+const det=(title,body)=>body?`<details${OPEN()}><summary>${title}</summary><div class="dbody">${body}</div></details>`:"";
+const notes=()=>(store.notes&&typeof store.notes==="object")?store.notes:(store.notes={});
+const key=(it,i)=>it&&it.id!=null?String(it.id):String(i+1);
+const nb=(path,label)=>`<button class="nb${notes()[path]?" has":""}" data-note="${esc(path)}" data-label="${esc(trunc(label||"",40))}" title="修正メモ：${esc(path)}">✎</button>`;
+const fpath=f=>"flows/"+key(f,flows.indexOf(f));
+const enb=e=>nb("edges/"+(edges.indexOf(e)+1),`${nameOf(e.from)} → ${nameOf(e.to)}`);
+function getAt(path){
+  let node=D;
+  for(const sg of String(path).split("/")){
+    if(Array.isArray(node)){let hit=node.find(x=>x&&x.id!=null&&String(x.id)===sg);if(hit===undefined&&/^\d+$/.test(sg))hit=node[+sg-1];node=hit;}
+    else if(node&&typeof node==="object")node=node[sg];else return undefined;
+    if(node===undefined)return undefined;
+  }return node;
+}
+const resolve=path=>path==="全体"||getAt(path)!==undefined;
+/* 選択した文字が item のどのフィールドにあるかを探し、path を細かくする */
+function refine(path,text){
+  const base=getAt(path);if(!base||typeof base!=="object")return path;
+  const norm=v=>String(v).replace(/[`*…]/g,"").replace(/\s+/g," ").trim().toLowerCase();
+  const t=norm(String(text).replace(/^\d+\.\s*/,""));if(t.length<2)return path;
+  let best=null;
+  (function rec(v,p){if(best)return;
+    if(typeof v==="string"||typeof v==="number"){if(norm(v).includes(t))best=p;return;}
+    if(Array.isArray(v))v.forEach((x,i)=>rec(x,p+"/"+(x&&typeof x==="object"&&x.id!=null?x.id:i+1)));
+    else if(v&&typeof v==="object")Object.keys(v).forEach(k=>{if(k!=="id")rec(v[k],p+"/"+k);});
+  })(base,path);
+  return best||path;
+}
+const files=f=>arr(f).length?`<ul>${arr(f).map(x=>`<li><code>${esc(x)}</code></li>`).join("")}</ul>`:"";
+
+/* ============ sections ============ */
+const SECTIONS=[
+  {k:"overview",label:"概要",n:null,lead:"目的と要点",r:rOverview},
+  {k:"arch",label:"構成",n:comps.length,lead:"要素をクリックで詳細・ホバーで依存関係",r:rArch},
+  {k:"flows",label:"処理フロー",n:flows.length,lead:"← → キーでステップ移動",r:rFlows},
+  {k:"data",label:"データ",n:ents.length,lead:"エンティティとフィールド",r:rData},
+  {k:"api",label:"API・IF",n:apis.length,lead:"行をクリックで入出力",r:rApi},
+  {k:"decisions",label:"設計判断",n:decs.length,lead:"何を選び、なぜか",r:rDecisions},
+  {k:"risks",label:"リスク・未決",n:risks.length+qs.length,lead:"懸念と要確認事項",r:rRisks},
+  {k:"tasks",label:"実装手順",n:tasks.length,lead:"上から順に実装",r:rTasks},
+].filter(s=>s.n===null||s.n>0);
+const SEC=Object.fromEntries(SECTIONS.map(s=>[s.k,s]));
+
+/* ---- overview ---- */
+function rOverview(search){
+  if(search)return "";
+  const tl=arr(ov.tldr);
+  let h=`<div class="card hero">${nb("overview","概要")}${ov.goal?`<div class="lbl">目的</div><div class="goal">${inline(ov.goal)}</div>`:""}
+    ${tl.length?`<div class="lbl">要点</div><ul>${tl.map(x=>`<li>${inline(x)}</li>`).join("")}</ul>`:""}
+    ${det("背景",md(ov.background))}</div>`;
+  const tiles=[];
+  if(comps.length){const n=comps.filter(c=>c.status==="new").length,c=comps.filter(c=>c.status==="changed").length;
+    tiles.push(["arch",comps.length,"構成要素",`新規 ${n} ・ 変更 ${c}`]);}
+  if(flows.length)tiles.push(["flows",flows.length,"処理フロー",flows.slice(0,2).map(f=>f.name).join("、")]);
+  if(tasks.length){const d=tasks.filter(t=>store[tKey(t)]).length;tiles.push(["tasks",`${d}/${tasks.length}`,"実装タスク","完了 / 全体"]);}
+  if(qs.length){const u=qs.filter(q=>!store[qKey(q)]).length;tiles.push(["risks",u,"未決事項","要確認",u>0]);}
+  if(risks.length){const hi=risks.filter(r=>r.level==="high").length;tiles.push(["risks",hi,"高リスク",`リスク計 ${risks.length}`,hi>0]);}
+  if(decs.length)tiles.push(["decisions",decs.length,"設計判断",`提案中 ${decs.filter(d=>d.status==="proposed").length}`]);
+  if(tiles.length)h+=`<div class="tiles">${tiles.map(([k,v,l,s,al])=>`<button class="tile${al?" alert":""}" data-go="${k}"><div class="v">${esc(v)}</div><div class="k">${esc(l)}</div><div class="s">${esc(s||"")}</div></button>`).join("")}</div>`;
+  const ng=arr(ov.nonGoals),cs=arr(ov.constraints);
+  if(ng.length||cs.length)h+=`<div class="grid2">
+    ${cs.length?`<div class="card"><div class="lbl">前提・制約</div><ul>${cs.map(x=>`<li>${inline(x)}</li>`).join("")}</ul></div>`:""}
+    ${ng.length?`<div class="card"><div class="lbl">やらないこと</div><ul>${ng.map(x=>`<li>${inline(x)}</li>`).join("")}</ul></div>`:""}</div>`;
+  return h;
+}
+
+/* ---- architecture ---- */
+function layers(){
+  const order=[];arr(D.layers).forEach(l=>{if(!order.includes(l))order.push(l);});
+  comps.forEach(c=>{const l=c.layer||"その他";if(!order.includes(l))order.push(l);});
+  return order.map(l=>({l,items:comps.filter(c=>(c.layer||"その他")===l)})).filter(r=>r.items.length);
+}
+function archSVG(){
+  const rows=layers();if(!rows.length)return "";
+  const RI={},CI={};rows.forEach((r,ri)=>r.items.forEach((c,ci)=>{RI[c.id]=ri;CI[c.id]=ci;}));
+  const okE=edges.filter(e=>e.from in RI&&e.to in RI&&e.from!==e.to);
+  const sameAdj=okE.some(e=>RI[e.from]===RI[e.to]&&Math.abs(CI[e.from]-CI[e.to])===1);
+  const arcTop=okE.some(e=>RI[e.from]===0&&RI[e.to]===0&&Math.abs(CI[e.from]-CI[e.to])>1);
+  const W=170,H=56,GX=sameAdj?76:30,GY=78,PL=92,PT=arcTop?44:14,PR=14;
+  const maxN=Math.max(...rows.map(r=>r.items.length));
+  const CW=maxN*W+(maxN-1)*GX, TW=PL+CW+PR, TH=PT+14+rows.length*H+(rows.length-1)*GY;
+  const P={};
+  rows.forEach((r,ri)=>{const rw=r.items.length*W+(r.items.length-1)*GX,x0=PL+(CW-rw)/2,y=PT+ri*(H+GY);r.y=y;
+    r.items.forEach((c,ci)=>{P[c.id]={x:x0+ci*(W+GX),y,ri,ci,cx:x0+ci*(W+GX)+W/2};});});
+  // ports: b=bottom t=top l=left r=right. spread multiple edges on the same side
+  const E2=okE.map(e=>{
+    const s=P[e.from],t=P[e.to];let ss,ts;
+    if(t.ri>s.ri){ss="b";ts="t";}else if(t.ri<s.ri){ss="t";ts="b";}
+    else if(Math.abs(t.ci-s.ci)===1){ss=t.ci>s.ci?"r":"l";ts=t.ci>s.ci?"l":"r";}
+    else{ss="t";ts="t";}
+    return {e,s,t,ss,ts};});
+  const ports={};
+  E2.forEach(o=>{(ports[o.e.from+"|"+o.ss]=ports[o.e.from+"|"+o.ss]||[]).push([o,"s",o.t.cx]);(ports[o.e.to+"|"+o.ts]=ports[o.e.to+"|"+o.ts]||[]).push([o,"t",o.s.cx]);});
+  Object.entries(ports).forEach(([k,list])=>{const side=k.slice(k.lastIndexOf("|")+1),span=(side==="l"||side==="r")?H-20:W-30;
+    list.sort((a,b)=>a[2]-b[2]);const n=list.length,step=Math.min(side==="l"||side==="r"?14:22,span/Math.max(1,n-1));
+    list.forEach(([o,w],i)=>{o[w+"off"]=(i-(n-1)/2)*step;});});
+  let s=`<svg class="arch" viewBox="0 0 ${TW} ${TH}" style="width:100%;max-width:${TW}px;min-width:${Math.round(TW*0.62)}px;margin:0 auto" role="img" aria-label="構成図">
+  <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk" d="M0,0L10,5L0,10z"/></marker></defs>`;
+  rows.forEach(r=>{s+=`<rect class="band" x="4" y="${r.y-8}" width="${TW-8}" height="${H+16}" rx="8"/><text class="layer" x="12" y="${r.y+H/2+4}">${esc(fit(r.l,PL-18,11.5))}</text>`;});
+  const placed=[],labels=[];
+  E2.forEach(o=>{
+    const {e,s:a,t:b}=o;const sx=a.cx+(o.soff||0),tx=b.cx+(o.toff||0);let d,lx,ly;
+    if(o.ss==="b"){const sy=a.y+H,ty=b.y,m=(ty-sy)/2;d=`M${sx},${sy} C${sx},${sy+m} ${tx},${ty-m} ${tx},${ty}`;lx=(sx+tx)/2;ly=(sy+ty)/2;}
+    else if(o.ts==="b"){const sy=a.y,ty=b.y+H,m=(sy-ty)/2;d=`M${sx},${sy} C${sx},${sy-m} ${tx},${ty+m} ${tx},${ty}`;lx=(sx+tx)/2;ly=(sy+ty)/2;}
+    else if(o.ss==="r"||o.ss==="l"){const r=o.ss==="r",x1=r?a.x+W:a.x,x2=r?b.x:b.x+W,y1=a.y+H/2+(o.soff||0),y2=b.y+H/2+(o.toff||0);
+      d=`M${x1},${y1} L${x2},${y2}`;lx=(x1+x2)/2;ly=(y1+y2)/2;o.side=true;}
+    else{const y=a.y,up=Math.min(38,22+Math.abs(tx-sx)*0.05);d=`M${sx},${y} C${sx},${y-up} ${tx},${y-up} ${tx},${y}`;lx=(sx+tx)/2;ly=y-up*0.75;}
+    const tip=`<title>${esc(nameOf(e.from))} → ${esc(nameOf(e.to))}${e.label?"："+esc(e.label):""}</title>`;
+    s+=`<g class="edge" data-from="${esc(e.from)}" data-to="${esc(e.to)}"><path d="${d}" marker-end="url(#ah)"/>${tip}</g>`;
+    if(e.label){
+      const t=fit(e.label,o.side?GX-14:140,11),w=tw(t,11)+12;
+      const onNode=(x,y)=>!o.side&&Object.values(P).some(n=>x+w/2>n.x-2&&x-w/2<n.x+W+2&&y+9>n.y-2&&y-9<n.y+H+2);
+      const hit=(x,y)=>onNode(x,y)||placed.some(r=>Math.abs(r.x-x)<(r.w+w)/2+4&&Math.abs(r.y-y)<19);
+      let best=ly,bx=lx;
+      const cand=[];for(const dy of [0,19,-19,38,-38])for(const dx of [0,-(w/2+8),w/2+8,-(w+16),w+16])cand.push([dx,dy]);
+      for(const [dx,dy] of cand){if(!hit(lx+dx,ly+dy)){bx=lx+dx;best=ly+dy;break;}}
+      placed.push({x:bx,y:best,w});
+      labels.push(`<g class="edge" data-from="${esc(e.from)}" data-to="${esc(e.to)}"><rect class="lb" x="${bx-w/2}" y="${best-9}" width="${w}" height="18" rx="5"/><text x="${bx}" y="${best+4}" text-anchor="middle">${esc(t)}</text>${tip}</g>`);
+    }
+  });
+  s+=labels.join("");
+  comps.forEach(c=>{const p=P[c.id];if(!p)return;
+    s+=`<g class="node st-${esc(c.status||"none")} k-${esc(c.kind||"")}" data-id="${esc(c.id)}" data-ref="comp:${esc(c.id)}" tabindex="0">
+      <rect x="${p.x}" y="${p.y}" width="${W}" height="${H}" rx="9"/>
+      <text class="nm" x="${p.cx}" y="${p.y+24}" text-anchor="middle">${esc(fit(c.name||c.id,W-16,13))}</text>
+      <text class="kd" x="${p.cx}" y="${p.y+42}" text-anchor="middle">${esc(fit([KIND[c.kind]||c.kind,ST[c.status]].filter(Boolean).join(" ・ "),W-16,11))}</text>
+      <title>${esc(c.name||c.id)}${c.summary?"\n"+esc(c.summary):""}</title></g>`;});
+  return s+"</svg>";
+}
+function compCard(c){
+  return `<div class="card click" data-ref="comp:${esc(c.id)}"${qa(c.id,c.name,c.summary,c.detail,c.files,c.responsibilities,c.layer)}>
+    <div class="cl-row"><b>${esc(c.name||c.id)}</b>${badge(c.status,ST)}${c.kind?`<span class="b">${esc(KIND[c.kind]||c.kind)}</span>`:""}${nb("components/"+c.id,c.name||c.id)}</div>
+    ${c.summary?`<div class="muted small">${inline(c.summary)}</div>`:""}</div>`;
+}
+function rArch(search){
+  let h="";
+  if(!search){
+    h+=`<div class="legend"><span><i style="background:var(--new-soft);border-color:var(--new)"></i>新規</span><span><i style="background:var(--chg-soft);border-color:var(--chg)"></i>変更</span><span><i style="background:var(--old-soft);border-color:var(--old)"></i>既存</span><span><i style="border-style:dashed;border-color:var(--sub)"></i>外部</span></div>`;
+    h+=`<div class="diagram">${archSVG()}</div><div class="lbl" style="margin-top:16px">要素一覧</div>`;
+  }
+  h+=layers().map(r=>`<div class="lbl">${esc(r.l)}</div><div class="grid3">${r.items.map(compCard).join("")}</div>`).join("");
+  return h;
+}
+
+/* ---- flows ---- */
+let curFlow=0,curStep=0;
+function parts(f){
+  const p=[];arr(f.participants).forEach(x=>{if(!p.includes(x))p.push(x);});
+  arr(f.steps).forEach(s=>[s.from,s.to].forEach(x=>{if(x!=null&&!p.includes(x))p.push(x);}));return p;
+}
+function seqSVG(f){
+  const steps=arr(f.steps),P=parts(f);if(!P.length)return `<div class="empty">ステップがありません</div>`;
+  const colW=150,pad=12,headH=40,rowH=44,top=headH+14;
+  const W=pad*2+colW*P.length,Ht=top+rowH*steps.length+14,X=p=>pad+colW*P.indexOf(p)+colW/2;
+  const cs=steps[curStep];
+  let s=`<svg class="seq" viewBox="0 0 ${W} ${Ht}" style="width:100%;max-width:${W}px;min-width:${Math.round(W*0.7)}px;margin:0 auto" role="img" aria-label="シーケンス図">
+  <defs><marker id="sa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="mk" d="M0,0L10,5L0,10z"/></marker>
+  <marker id="sac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="mk-cur" d="M0,0L10,5L0,10z"/></marker></defs>`;
+  P.forEach(p=>{const x=X(p),on=cs&&(cs.from===p||cs.to===p),isC=!!C[p];
+    s+=`<line class="life" x1="${x}" y1="${headH}" x2="${x}" y2="${Ht-6}"/>
+    <g class="pt${on?" on":""}${isC?" ref":""}"${isC?` data-ref="comp:${esc(p)}"`:""}><rect x="${x-colW/2+8}" y="4" width="${colW-16}" height="${headH-8}" rx="8"/>
+    <text x="${x}" y="${headH/2+4}" text-anchor="middle">${esc(fit(nameOf(p),colW-28,12.5))}</text><title>${esc(nameOf(p))}</title></g>`;});
+  steps.forEach((st,i)=>{
+    const y=top+rowH*i+rowH/2+6,x1=X(st.from),x2=X(st.to),cur=i===curStep;
+    const cls=`st${cur?" cur":""}${st.reply?" reply":""}`,mk=cur?"url(#sac)":"url(#sa)";
+    const lbl=`${i+1}. ${st.label||""}`;
+    if(st.from===st.to){
+      s+=`<g class="${cls}" data-step="${i}"><rect class="hit" x="${x1-10}" y="${y-rowH/2}" width="${colW-10}" height="${rowH}"/>
+      <path d="M${x1},${y-10} h32 v14 h-30" marker-end="${mk}"/><text x="${x1+38}" y="${y-2}">${esc(fit(lbl,colW-50,11.5))}</text><title>${esc(lbl)}</title></g>`;
+    }else{
+      const span=Math.abs(x2-x1);
+      s+=`<g class="${cls}" data-step="${i}"><rect class="hit" x="${Math.min(x1,x2)}" y="${y-rowH/2}" width="${span}" height="${rowH}"/>
+      <line x1="${x1}" y1="${y}" x2="${x2+(x2>x1?-2:2)}" y2="${y}" marker-end="${mk}"/>
+      <text x="${(x1+x2)/2}" y="${y-7}" text-anchor="middle">${esc(fit(lbl,span-14,11.5))}</text><title>${esc(lbl)}</title></g>`;
+    }
+  });
+  return s+"</svg>";
+}
+function stepDetail(f){
+  const steps=arr(f.steps),st=steps[curStep];if(!st)return "";
+  const who=id=>C[id]?ref("comp",id):`<b>${esc(id)}</b>`;
+  return `<div class="card stepd"><div class="head"><span class="num">${curStep+1}</span>${who(st.from)}<span class="muted">→</span>${who(st.to)}${st.reply?`<span class="b">応答</span>`:""}${nb(fpath(f)+"/steps/"+(curStep+1),`${curStep+1}. ${st.label||""}`)}</div>
+    <div class="lab">${inline(st.label||"")}</div>${md(st.detail)}</div>`;
+}
+function rFlows(search){
+  if(search)return flows.map(f=>`<div class="card click" data-goflow="${flows.indexOf(f)}"${qa(f.name,f.summary,arr(f.steps).map(s=>[s.label,s.detail,s.from,s.to]))}>
+    <b>${esc(f.name||f.id)}</b><div class="muted small">${inline(f.summary||"")}</div>
+    <ol class="small">${arr(f.steps).map(s=>`<li>${esc(nameOf(s.from))} → ${esc(nameOf(s.to))}：${inline(s.label||"")}</li>`).join("")}</ol></div>`).join("");
+  const f=flows[curFlow]||flows[0];if(!f)return "";
+  const n=arr(f.steps).length;
+  let h="";
+  if(flows.length>1)h+=`<div class="pills">${flows.map((x,i)=>`<button class="pill${i===curFlow?" on":""}" data-flow="${i}">${esc(x.name||x.id)}</button>`).join("")}</div>`;
+  h+=`<div class="cl-row" style="margin:0 0 8px"><span class="muted">${inline(f.summary||"")}</span>${nb(fpath(f),f.name||f.id)}</div>`;
+  h+=`<div id="flowbox"><div class="diagram">${seqSVG(f)}</div>
+    ${n?`<div class="stepper"><button class="btn" data-mv="-1"${curStep<=0?" disabled":""}>◀ 前</button><span class="pos">ステップ ${curStep+1} / ${n}</span><button class="btn" data-mv="1"${curStep>=n-1?" disabled":""}>次 ▶</button></div>`:""}
+    ${stepDetail(f)}</div>`;
+  if(f.detail)h+=det("このフローの補足",md(f.detail));
+  return h;
+}
+function moveStep(d){
+  const f=flows[curFlow];if(!f)return;const n=arr(f.steps).length;
+  const ns=Math.max(0,Math.min(n-1,curStep+d));if(ns===curStep)return;curStep=ns;refreshFlow();
+}
+function refreshFlow(){const box=$("#flowbox");if(!box)return;const tmp=document.createElement("div");tmp.innerHTML=rFlows(false);const nb=$("#flowbox",tmp);if(nb)box.replaceWith(nb);}
+
+/* ---- data ---- */
+function relChips(id){
+  return rels.filter(r=>r.from===id||r.to===id).map(r=>{const other=r.from===id?r.to:r.from;
+    const t=`${r.from===id?"→":"←"} ${r.type||""}`;
+    return E[other]?`<button class="chip" data-ref="ent:${esc(other)}" title="${esc(r.label||"")}">${esc(entName(other))} <span class="muted">${esc(t)}</span></button>`:"";}).join("");
+}
+function fieldTable(fs){
+  if(!fs.length)return "";
+  return `<table><thead><tr><th>名前</th><th>型</th><th>説明</th></tr></thead><tbody>${fs.map(f=>`<tr><td><code>${esc(f.name)}</code>${f.key?' <span class="b">PK</span>':""}${f.status?" "+badge(f.status,ST):""}</td><td class="muted">${esc(f.type||"")}</td><td>${inline(f.note||"")}</td></tr>`).join("")}</tbody></table>`;
+}
+function rData(){
+  return `<div class="grid2">${ents.map(e=>{
+    const fs=arr(e.fields),key=fs.filter(f=>f.key||f.status==="new"||f.status==="changed");const show=(key.length?key:fs).slice(0,4);
+    const rc=relChips(e.id);
+    return `<div class="card"${qa(e.id,e.name,e.summary,e.detail,fs.map(f=>[f.name,f.type,f.note]))}>
+      <div class="cl-row"><b class="click" data-ref="ent:${esc(e.id)}">${esc(e.name||e.id)}</b>${badge(e.status,ST)}${nb("entities/"+e.id,e.name||e.id)}</div>
+      ${e.summary?`<div class="muted small">${inline(e.summary)}</div>`:""}
+      ${show.length?`<div class="small" style="margin-top:6px">${show.map(f=>`<code>${esc(f.name)}</code> <span class="muted">${esc(f.type||"")}</span>${f.status?" "+badge(f.status,ST):""}`).join("<br>")}</div>`:""}
+      ${rc?`<div style="margin-top:6px">${rc}</div>`:""}
+      ${det(`全フィールド（${fs.length}）`,fieldTable(fs)+md(e.detail))}</div>`;}).join("")}</div>`;
+}
+
+/* ---- api ---- */
+function rApi(){
+  return `<div class="cards">${apis.map((a,ai)=>{
+    const m=(a.method||"").toUpperCase(),sig=a.path||a.signature||a.name||"";
+    const body=[a.component&&`<div class="lbl">担当</div>${ref("comp",a.component)}`,
+      a.request&&`<div class="lbl">入力</div><pre><code>${esc(a.request)}</code></pre>`,
+      a.response&&`<div class="lbl">出力</div><pre><code>${esc(a.response)}</code></pre>`,
+      arr(a.errors).length&&`<div class="lbl">エラー</div><ul>${arr(a.errors).map(x=>`<li>${inline(x)}</li>`).join("")}</ul>`,
+      md(a.detail)].filter(Boolean).join("");
+    return `<div class="card"${qa(a.id,m,sig,a.summary,a.request,a.response,a.errors,a.detail,a.component)}>
+      <div class="api-h">${m?`<span class="m ${esc(m)}">${esc(m)}</span>`:""}<code>${esc(sig)}</code>${badge(a.status,ST)}<span class="muted small">${inline(a.summary||"")}</span>${nb("apis/"+key(a,ai),sig)}</div>
+      ${det("入出力・詳細",body)}</div>`;}).join("")}</div>`;
+}
+
+/* ---- decisions ---- */
+function rDecisions(){
+  return `<div class="cards">${decs.map((d,di)=>{
+    const alts=arr(d.alternatives);
+    return `<div class="card"${qa(d.title,d.chosen,d.reason,alts.map(a=>[a.name,a.pros,a.cons]))}>
+      <div class="cl-row"><b>${inline(d.title||"")}</b>${badge(d.status,DS)}${nb("decisions/"+key(d,di),d.title)}</div>
+      ${d.chosen?`<div class="chosen"><div class="k">採用</div>${inline(d.chosen)}</div>`:""}
+      ${md(d.reason)}
+      ${det(`検討した案（${alts.length}）`,alts.length?`<div class="alts">${alts.map(a=>`<div class="alt"><b>${inline(a.name||"")}</b>
+        ${arr(a.pros).length?`<ul class="pro">${arr(a.pros).map(x=>`<li>${inline(x)}</li>`).join("")}</ul>`:""}
+        ${arr(a.cons).length?`<ul class="con">${arr(a.cons).map(x=>`<li>${inline(x)}</li>`).join("")}</ul>`:""}</div>`).join("")}</div>`:"")}</div>`;}).join("")}</div>`;
+}
+
+/* ---- risks & questions ---- */
+function rRisks(){
+  const ord={high:0,mid:1,low:2};
+  let h="";
+  if(qs.length){const u=qs.filter(q=>!store[qKey(q)]).length;
+    h+=`<div class="lbl">未決事項（残り <span id="qleft">${u}</span> / ${qs.length}）</div><div class="cards">${qs.map((q,qi)=>{const k=qKey(q),on=!!store[k];
+      return `<div class="card chkrow${on?" done":""}"${qa(q.q,q.context,q.owner,q.options)}><input type="checkbox" data-store="${esc(k)}"${on?" checked":""} title="解決済みにする">
+        <div class="body"><div class="cl-row"><b class="t">${inline(q.q||"")}</b>${nb("questions/"+key(q,qi),q.q)}</div>
+        ${q.context?`<div class="muted small">${inline(q.context)}</div>`:""}
+        ${arr(q.options).length?`<div class="small">選択肢：${arr(q.options).map(inline).join(" ／ ")}</div>`:""}
+        ${q.owner?`<div class="small muted">確認先：${esc(q.owner)}</div>`:""}</div></div>`;}).join("")}</div>`;}
+  if(risks.length)h+=`<div class="lbl" style="margin-top:16px">リスク</div><div class="cards">${[...risks].sort((a,b)=>(ord[a.level]??3)-(ord[b.level]??3)).map(r=>`
+    <div class="card"${qa(r.title,r.level,r.mitigation,r.detail)}><div class="cl-row"><span class="dot ${esc(r.level||"")}"></span><b>${inline(r.title||"")}</b>${badge(r.level,LV)}${nb("risks/"+key(r,risks.indexOf(r)),r.title)}</div>
+    ${r.mitigation?`<div class="small"><span class="muted">対策：</span>${inline(r.mitigation)}</div>`:""}${det("詳細",md(r.detail))}</div>`).join("")}</div>`;
+  return h;
+}
+
+/* ---- tasks ---- */
+function rTasks(){
+  const d=tasks.filter(t=>store[tKey(t)]).length,pct=tasks.length?Math.round(d*100/tasks.length):0;
+  return `<div class="small muted">完了 <span id="tdone">${d}</span> / ${tasks.length}</div><div class="prog"><i id="tbar" style="width:${pct}%"></i></div>
+  <div class="cards">${tasks.map((t,i)=>{const k=tKey(t),on=!!store[k];
+    return `<div class="card chkrow${on?" done":""}"${qa(t.id,t.title,t.summary,t.detail,t.files,t.components)}><input type="checkbox" data-store="${esc(k)}"${on?" checked":""} title="完了にする">
+      <div class="body"><div class="cl-row t"><span class="tnum">${i+1}</span><b class="click" data-ref="task:${esc(t.id)}">${inline(t.title||t.id)}</b>${t.size?`<span class="b">${esc(t.size)}</span>`:""}${nb("tasks/"+key(t,i),t.title)}</div>
+      ${t.summary?`<div class="muted small">${inline(t.summary)}</div>`:""}
+      ${(arr(t.dependsOn).length||arr(t.components).length)?`<div class="small" style="margin-top:4px">${arr(t.dependsOn).length?`<span class="muted">前提 </span>${refs("task",t.dependsOn)}`:""}${arr(t.components).length?`<span class="muted">対象 </span>${refs("comp",t.components)}`:""}</div>`:""}
+      ${det("詳細",md(t.detail)+(arr(t.files).length?`<div class="lbl">ファイル</div>${files(t.files)}`:"")+(t.done_when?`<div class="lbl">完了条件</div>${md(t.done_when)}`:""))}</div></div>`;}).join("")}</div>`;
+}
+
+/* ============ drawer ============ */
+function openRef(type,id){
+  let k="",h="";
+  if(type==="comp"&&C[id]){const c=C[id];k="構成要素";
+    const out=edges.filter(e=>e.from===id),inc=edges.filter(e=>e.to===id);
+    const fl=flows.map((f,i)=>[f,i]).filter(([f])=>arr(f.steps).some(s=>s.from===id||s.to===id));
+    const ap=apis.filter(a=>a.component===id),tk=tasks.filter(t=>arr(t.components).includes(id));
+    h=`<h3>${esc(c.name||id)}</h3><div>${badge(c.status,ST)} ${c.kind?`<span class="b">${esc(KIND[c.kind]||c.kind)}</span>`:""} ${c.layer?`<span class="b">${esc(c.layer)}</span>`:""}</div>
+      ${c.summary?`<p>${inline(c.summary)}</p>`:""}
+      ${arr(c.responsibilities).length?`<div class="lbl">責務</div><ul>${arr(c.responsibilities).map(x=>`<li>${inline(x)}</li>`).join("")}</ul>`:""}
+      ${arr(c.files).length?`<div class="lbl">ファイル</div>${files(c.files)}`:""}
+      ${c.detail?`<div class="lbl">詳細</div>${md(c.detail)}`:""}
+      ${out.length?`<div class="lbl">呼び出す・依存する</div>${out.map(e=>ref("comp",e.to)+(e.label?`<span class="small muted">${esc(e.label)}</span> `:"")+enb(e)).join("<br>")}`:""}
+      ${inc.length?`<div class="lbl">呼ばれる・依存される</div>${inc.map(e=>ref("comp",e.from)+(e.label?`<span class="small muted">${esc(e.label)}</span> `:"")+enb(e)).join("<br>")}`:""}
+      ${fl.length?`<div class="lbl">登場するフロー</div>${fl.map(([f,i])=>`<button class="chip" data-goflow="${i}" data-focus="${esc(id)}">${esc(f.name||f.id)}</button>`).join("")}`:""}
+      ${ap.length?`<div class="lbl">API・IF</div><ul>${ap.map(a=>`<li><code>${esc(((a.method||"")+" "+(a.path||a.signature||a.name||"")).trim())}</code></li>`).join("")}</ul>`:""}
+      ${tk.length?`<div class="lbl">関連タスク</div>${refs("task",tk.map(t=>t.id))}`:""}`;
+  }else if(type==="ent"&&E[id]){const e=E[id];k="エンティティ";const rc=relChips(id);
+    h=`<h3>${esc(e.name||id)}</h3><div>${badge(e.status,ST)}</div>${e.summary?`<p>${inline(e.summary)}</p>`:""}
+      <div class="lbl">フィールド</div>${fieldTable(arr(e.fields))||'<div class="muted small">なし</div>'}
+      ${rc?`<div class="lbl">関連</div>${rc}`:""}${e.detail?`<div class="lbl">詳細</div>${md(e.detail)}`:""}`;
+  }else if(type==="task"&&T[id]){const t=T[id];k="実装タスク";const next=tasks.filter(x=>arr(x.dependsOn).includes(id));
+    h=`<h3>${inline(t.title||id)}</h3><div>${t.size?`<span class="b">${esc(t.size)}</span>`:""} ${store[tKey(t)]?'<span class="b approved">完了</span>':""}</div>
+      ${t.summary?`<p>${inline(t.summary)}</p>`:""}${t.detail?`<div class="lbl">内容</div>${md(t.detail)}`:""}
+      ${arr(t.files).length?`<div class="lbl">ファイル</div>${files(t.files)}`:""}
+      ${t.done_when?`<div class="lbl">完了条件</div>${md(t.done_when)}`:""}
+      ${arr(t.components).length?`<div class="lbl">対象</div>${refs("comp",t.components)}`:""}
+      ${arr(t.dependsOn).length?`<div class="lbl">前提タスク</div>${refs("task",t.dependsOn)}`:""}
+      ${next.length?`<div class="lbl">後続タスク</div>${refs("task",next.map(x=>x.id))}`:""}`;
+  }else return;
+  const path=(type==="comp"?"components/":type==="ent"?"entities/":"tasks/")+id,o=type==="comp"?C[id]:type==="ent"?E[id]:T[id];
+  h=`<div class="cl-row" style="margin-bottom:4px"><span class="path">${esc(path)}</span>${nb(path,o.name||o.title||id)}</div>`+h;
+  $("#dw-kind").textContent=k;$("#dw-body").innerHTML=h;showDrawer();
+}
+function showDrawer(){$("#dw-body").scrollTop=0;$("#drawer").classList.add("on");$("#drawer").setAttribute("aria-hidden","false");$("#scrim").classList.add("on");}
+
+/* ============ notes (修正メモ) ============ */
+function updateNotesN(){const n=Object.keys(notes()).length;$("#notesN").textContent=n?` ${n}`:"";$("#notesBtn").classList.toggle("pri",n>0);}
+function openNote(path,label,quote){
+  const n=notes()[path];
+  let init=n?n.text:"";if(quote)init+=(init?"\n":"")+`「${trunc(quote,80)}」→ `;
+  $("#dw-kind").textContent="修正メモ";
+  $("#dw-body").innerHTML=`<h3>${esc(label||path)}</h3><div class="path">${esc(path)}</div>
+    <div class="lbl" style="margin-top:14px">直してほしい内容</div>
+    <textarea class="note-ta" id="note-ta" placeholder="例：閾値は10回にしたい／この矢印は不要／もっと詳しく">${esc(init)}</textarea>
+    <div class="btns"><button class="btn pri" data-nsave="${esc(path)}" data-label="${esc(label||"")}">保存</button>${n?`<button class="btn" data-ndel="${esc(path)}">削除</button>`:""}<button class="btn" data-nlist>一覧へ</button></div>
+    <div class="small muted">Ctrl+Enter で保存。メモはこのブラウザにだけ保存されます。</div>`;
+  showDrawer();setTimeout(()=>{const ta=$("#note-ta");if(ta){ta.focus();ta.selectionStart=ta.value.length;}},60);
+}
+function notesText(){
+  const ns=notes(),ks=Object.keys(ns);
+  return `設計の修正依頼（${D._source||"design.json"}）\n`+ks.map(k=>{const n=ns[k];
+    return `- ${k}${n.label&&k!=="全体"?`（${n.label}）`:""}: ${String(n.text).split("\n").join("\n  ")}`;}).join("\n");
+}
+function openNotes(){
+  const ns=notes(),ks=Object.keys(ns);
+  $("#dw-kind").textContent="修正依頼";
+  $("#dw-body").innerHTML=`<h3>修正依頼 ${ks.length} 件</h3>
+    <p class="muted small">各項目の ✎、または文字を選択して出るボタンで書いたメモの一覧です。「コピー」して Claude に貼り付けると、該当箇所だけが直されます。</p>
+    <div class="btns"><button class="btn pri" data-ncopy${ks.length?"":" disabled"}>コピー</button><button class="btn" data-note="全体" data-label="設計全体">＋ 全体へのメモ</button>${ks.length?`<button class="btn" data-nclear>すべて削除</button>`:""}</div>
+    ${ks.length?ks.map(k=>{const ok=resolve(k);return `<div class="nl${ok?"":" stale"}"><div class="cl-row"><span class="path">${esc(k)}${ok?"":"（見つからない）"}</span>${nb(k,ns[k].label)}</div>
+      ${ns[k].label?`<div class="small"><b>${esc(ns[k].label)}</b></div>`:""}<div class="txt small">${esc(ns[k].text)}</div></div>`;}).join("")
+      +`<div class="lbl" style="margin-top:14px">貼り付け用テキスト</div><textarea class="note-ta" id="note-out" readonly>${esc(notesText())}</textarea>`
+      :`<div class="empty">まだメモはありません。<br>カードや詳細パネルの ✎ から書けます。</div>`}`;
+  showDrawer();
+}
+function saveNote(path,label){
+  const t=($("#note-ta")||{}).value||"";
+  if(t.trim())notes()[path]={text:t.trim(),label};else delete notes()[path];
+  save();updateNotesN();render();closeDrawer();
+}
+function copyNotes(btn){
+  const t=notesText();
+  const done=()=>{btn.textContent="コピーしました";setTimeout(()=>{btn.textContent="コピー";},1600);};
+  const fb=()=>{const ta=$("#note-out");if(ta){ta.select();try{document.execCommand("copy");done();}catch(e){btn.textContent="上の欄から手動でコピー";}}};
+  if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(t).then(done,fb);else fb();
+}
+function closeDrawer(){const ae=document.activeElement;if(ae&&$("#drawer").contains(ae))ae.blur();$("#drawer").classList.remove("on");$("#drawer").setAttribute("aria-hidden","true");$("#scrim").classList.remove("on");}
+
+/* ============ 文字を選択 → この箇所にメモ ============ */
+const SECPATH={overview:"overview",arch:"components",data:"entities",api:"apis",decisions:"decisions",risks:"risks",tasks:"tasks"};
+function noteCtx(el){
+  const st=el.closest(".seq .st");if(st&&flows[curFlow])return {path:fpath(flows[curFlow])+"/steps/"+(+st.dataset.step+1),label:`ステップ ${+st.dataset.step+1}`};
+  const pt=el.closest(".seq .pt[data-ref], .arch .node");if(pt){const id=pt.dataset.id||pt.dataset.ref.slice(5);return {path:"components/"+id,label:nameOf(id)};}
+  const c=el.closest(".card,#dw-body");if(c){const b=c.querySelector(".nb");if(b)return {path:b.dataset.note,label:b.dataset.label};}
+  if(cur==="flows"&&flows[curFlow])return {path:fpath(flows[curFlow]),label:flows[curFlow].name||""};
+  return {path:SECPATH[cur]||"全体",label:(SEC[cur]||{}).label||"設計全体"};
+}
+let tipCtx=null,tipT;
+const tip=$("#seltip");const hideTip=()=>{tip.style.display="none";tipCtx=null;};
+function checkSel(){
+  const sel=getSelection();const txt=sel&&sel.rangeCount?String(sel).replace(/\s+/g," ").trim():"";
+  if(txt.length<2){hideTip();return;}
+  const nd=sel.anchorNode,el=nd&&(nd.nodeType===1?nd:nd.parentElement);
+  if(!el||!el.closest("#main,#dw-body")||el.closest("textarea,input")||$("#note-ta")&&$("#drawer").classList.contains("on")&&el.closest("#dw-body")||$("#note-out")&&el.closest("#dw-body")){hideTip();return;}
+  const ctx=noteCtx(el);if(!ctx){hideTip();return;}
+  tipCtx={path:refine(ctx.path,txt),label:ctx.label,quote:txt};
+  $(".pp",tip).textContent=tipCtx.path;
+  const r=sel.getRangeAt(0).getBoundingClientRect();tip.style.display="block";
+  const w=tip.offsetWidth,h=tip.offsetHeight;
+  tip.style.left=Math.max(8,Math.min(innerWidth-w-8,r.left+r.width/2-w/2))+"px";
+  tip.style.top=(r.top-h-8<8?r.bottom+8:r.top-h-8)+"px";
+}
+document.addEventListener("selectionchange",()=>{clearTimeout(tipT);tipT=setTimeout(checkSel,220);});
+window.addEventListener("scroll",hideTip,true);
+tip.addEventListener("mousedown",e=>e.preventDefault());
+tip.addEventListener("click",()=>{if(!tipCtx)return;const c=tipCtx;hideTip();getSelection().removeAllRanges();openNote(c.path,c.label,c.quote);});
+
+/* ============ routing / render ============ */
+let cur=SECTIONS[0].k,query="";
+function renderNav(){
+  $("#nav").innerHTML=SECTIONS.map(s=>`<button data-go="${s.k}" class="${!query&&s.k===cur?"on":""}"><span>${s.label}</span>${s.n?`<span class="n">${s.n}</span>`:""}</button>`).join("")
+    +`<div class="hint">/ 検索<br>← → ステップ移動<br>Esc 閉じる<br>✎ 修正メモ<br>文字を選択 → メモ</div>`;
+}
+function render(){
+  renderNav();const main=$("#main");
+  if(query){
+    main.innerHTML=SECTIONS.map(s=>{const body=s.r(true);return body?`<div class="sec" data-sec="${s.k}"><div class="sec-h"><h2>${s.label}</h2></div>${body}</div>`:"";}).join("");
+    let hits=0;
+    $$(".sec",main).forEach(sec=>{let n=0;$$("[data-q]",sec).forEach(el=>{const ok=el.dataset.q.includes(query);el.style.display=ok?"":"none";if(ok)n++;});sec.style.display=n?"":"none";hits+=n;});
+    // hide empty layer groups in search
+    $$(".grid3,.cards,.grid2",main).forEach(g=>{const vis=$$("[data-q]",g).some(el=>el.style.display!=="none");g.style.display=vis?"":"none";const lb=g.previousElementSibling;if(lb&&lb.classList.contains("lbl"))lb.style.display=vis?"":"none";});
+    main.insertAdjacentHTML("afterbegin",`<div class="hit-n">「${esc(query)}」の検索結果：${hits} 件</div>`);
+    if(!hits)main.insertAdjacentHTML("beforeend",`<div class="empty">該当なし</div>`);
+    return;
+  }
+  const s=SEC[cur]||SECTIONS[0];
+  main.innerHTML=`<div class="sec-h"><h2>${s.label}</h2><span class="lead">${esc(s.lead)}</span></div>${s.r(false)||'<div class="empty">データなし</div>'}`;
+}
+function go(k){if(!SEC[k])k=SECTIONS[0].k;cur=k;if(location.hash!=="#"+k)history.replaceState(null,"","#"+k);window.scrollTo(0,0);render();}
+function goFlow(i,focus){
+  curFlow=Math.max(0,Math.min(flows.length-1,i));curStep=0;
+  if(focus){const k=arr(flows[curFlow].steps).findIndex(s=>s.from===focus||s.to===focus);if(k>=0)curStep=k;}
+  query="";$("#q").value="";closeDrawer();go("flows");
+}
+
+/* ============ events ============ */
+document.addEventListener("click",ev=>{
+  const t=ev.target;
+  const nt=t.closest("[data-note]");if(nt){openNote(nt.dataset.note,nt.dataset.label);return;}
+  const ns=t.closest("[data-nsave]");if(ns){saveNote(ns.dataset.nsave,ns.dataset.label);return;}
+  const nd=t.closest("[data-ndel]");if(nd){delete notes()[nd.dataset.ndel];save();updateNotesN();render();openNotes();return;}
+  if(t.closest("[data-nlist]")){openNotes();return;}
+  const nc=t.closest("[data-ncopy]");if(nc){copyNotes(nc);return;}
+  const nx=t.closest("[data-nclear]");if(nx){if(nx.dataset.sure){store.notes={};save();updateNotesN();render();openNotes();}else{nx.dataset.sure=1;nx.textContent="もう一度押すと全削除";}return;}
+  const gf=t.closest("[data-goflow]");if(gf){goFlow(+gf.dataset.goflow,gf.dataset.focus);return;}
+  const g=t.closest("[data-go]");if(g){query="";$("#q").value="";closeDrawer();go(g.dataset.go);return;}
+  const fl=t.closest("[data-flow]");if(fl){curFlow=+fl.dataset.flow;curStep=0;render();return;}
+  const mv=t.closest("[data-mv]");if(mv){moveStep(+mv.dataset.mv);return;}
+  const st=t.closest("[data-step]");if(st){curStep=+st.dataset.step;refreshFlow();return;}
+  if(t.matches("input[data-store]"))return;
+  const r=t.closest("[data-ref]");if(r){const i=r.dataset.ref.indexOf(":");openRef(r.dataset.ref.slice(0,i),r.dataset.ref.slice(i+1));return;}
+});
+document.addEventListener("change",ev=>{
+  const t=ev.target;if(!t.matches("input[data-store]"))return;
+  const k=t.dataset.store;if(t.checked)store[k]=1;else delete store[k];save();
+  t.closest(".chkrow").classList.toggle("done",t.checked);
+  const d=tasks.filter(x=>store[tKey(x)]).length;
+  if($("#tdone")){$("#tdone").textContent=d;$("#tbar").style.width=(tasks.length?Math.round(d*100/tasks.length):0)+"%";}
+  if($("#qleft"))$("#qleft").textContent=qs.filter(q=>!store[qKey(q)]).length;
+});
+// architecture hover: highlight neighbors
+document.addEventListener("mouseover",ev=>{
+  const n=ev.target.closest&&ev.target.closest(".arch .node");const svg=$(".arch");if(!svg)return;
+  if(!n){if(svg.classList.contains("focus")){svg.classList.remove("focus");$$(".on",svg).forEach(x=>x.classList.remove("on"));}return;}
+  const id=n.dataset.id;$$(".on",svg).forEach(x=>x.classList.remove("on"));svg.classList.add("focus");n.classList.add("on");
+  $$(".edge",svg).forEach(e=>{if(e.dataset.from===id||e.dataset.to===id){e.classList.add("on");const o=e.dataset.from===id?e.dataset.to:e.dataset.from;const on=$(`.node[data-id="${CSS.escape(o)}"]`,svg);if(on)on.classList.add("on");}});
+});
+document.addEventListener("keydown",ev=>{
+  const typing=/^(INPUT|TEXTAREA|SELECT)$/.test((ev.target.tagName||""));
+  if(ev.key==="Enter"&&(ev.ctrlKey||ev.metaKey)&&ev.target.id==="note-ta"){const b=$("[data-nsave]");if(b)b.click();return;}
+  if(ev.key==="Escape"){if($("#drawer").classList.contains("on"))closeDrawer();else if(query){query="";$("#q").value="";render();}else if(typing)ev.target.blur();return;}
+  if(typing)return;
+  if(ev.key==="/"){ev.preventDefault();$("#q").focus();return;}
+  if(ev.key==="Enter"&&ev.target.closest&&ev.target.closest(".arch .node")){const id=ev.target.dataset.id;openRef("comp",id);return;}
+  if(cur==="flows"&&!query&&(ev.key==="ArrowRight"||ev.key==="ArrowLeft")){ev.preventDefault();moveStep(ev.key==="ArrowRight"?1:-1);}
+});
+let qt;$("#q").addEventListener("input",e=>{clearTimeout(qt);qt=setTimeout(()=>{query=e.target.value.trim().toLowerCase();render();},120);});
+$("#toggleAll").addEventListener("click",()=>{expandAll=!expandAll;$("#toggleAll").textContent=expandAll?"すべて折りたたむ":"すべて展開";$$("#main details").forEach(d=>d.open=expandAll);});
+$("#scrim").addEventListener("click",closeDrawer);$("#notesBtn").addEventListener("click",openNotes);updateNotesN();$("#dw-close").addEventListener("click",closeDrawer);
+window.addEventListener("hashchange",()=>{const k=location.hash.slice(1);if(SEC[k]&&k!==cur){query="";$("#q").value="";go(k);}});
+
+go(location.hash.slice(1)||SECTIONS[0].k);
+})();
+</script>
+</body>
+</html>
