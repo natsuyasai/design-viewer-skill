@@ -94,10 +94,18 @@ EOF
 1. **原文のまま写す**: `requirements[].text` と Gherkin の各ステップは、元資料の文を一字一句そのまま書く。要約・言い換え・翻訳・統合・分割をしない。件数も減らさない（build.js は長さ・件数の警告を出さない）。
 2. **ID は元資料のまま**: `REQ-001` のような ID があれば、そのまま `id` にする（英小文字に直さない）。ID がない場合だけ自分で付ける。
 3. **EARS の pattern を付ける**: 文の形から `ubiquitous`（常時）/ `event`（When・〜とき）/ `state`（While・〜の間）/ `unwanted`（If…then・〜場合）/ `optional`（Where）/ `complex`（複数の組み合わせ）を選ぶ。
-4. **Gherkin は構造に分けるだけ**: Feature → `features`、Background → `background`、Scenario / Scenario Outline → `scenarios`、Examples → `examples`、Rule → `scenario.rule`。ステップは `前提` / `Given` などのキーワードを含めた 1 行をそのまま文字列にする。データ表と DocString はステップをオブジェクトにして `table` / `doc` に入れる。言語（日本語 / 英語）は元のまま。
-5. **つなぐ**: シナリオがどの要件を確かめるかを `scenarios[].verifies` に、要件を実現するコンポーネントを `requirements[].components` に書く。元資料に対応が書かれていなければ、内容から判断して付け、判断に自信がないものは `questions` に入れる。
-6. **元資料にないものを足さない**: テストケースが足りないと思ったら、シナリオを勝手に追加せず `risks` か `questions` に書く（ユーザーに頼まれたら追加してよい）。
-7. **検証されていない要件の WARN** は、対応するシナリオが本当にないなら無視してよい。報告時に「シナリオのない要件: REQ-xxx」と一言添える。
+4. **`.feature` ファイルがあるときは手で写さない**: 先に design.json（meta と requirements）を書いてから、スクリプトで取り込む。
+   ```
+   node "<このスキルのフォルダ>/scripts/import-gherkin.js" docs/design/<slug>.design.json tests/features
+   ```
+   - ファイルかフォルダを渡す（複数可）。保存と HTML 再生成は自動。`--dry` で保存せずに確認できる。
+   - `@REQ-001` のように requirements の id と同じタグは、自動で `verifies` になる。それ以外の対応は `edit.js` の `set .../verifies` で足す。
+   - `.feature` を直したら同じコマンドを再実行する。id と手で足した `verifies` は、シナリオ名が同じなら引き継がれる。「ファイルから消えたシナリオ」と出たら、名前が変わったシナリオの `verifies` を付け直す。
+   - `[ERROR]` は元ファイルの構文の問題。元ファイルは勝手に直さず、ユーザーに行番号を伝える。
+5. **Gherkin は構造に分けるだけ**（`.feature` ファイルがなく、文章の中に Gherkin があるとき）: Feature → `features`、Background → `background`、Scenario / Scenario Outline → `scenarios`、Examples → `examples`、Rule → `scenario.rule`。ステップは `前提` / `Given` などのキーワードを含めた 1 行をそのまま文字列にする。データ表と DocString はステップをオブジェクトにして `table` / `doc` に入れる。言語（日本語 / 英語）は元のまま。
+6. **つなぐ**: シナリオがどの要件を確かめるかを `scenarios[].verifies` に、要件を実現するコンポーネントを `requirements[].components` に書く。元資料に対応が書かれていなければ、内容から判断して付け、判断に自信がないものは `questions` に入れる。
+7. **元資料にないものを足さない**: テストケースが足りないと思ったら、シナリオを勝手に追加せず `risks` か `questions` に書く（ユーザーに頼まれたら追加してよい）。
+8. **検証されていない要件の WARN** は、対応するシナリオが本当にないなら無視してよい。報告時に「シナリオのない要件: REQ-xxx」と一言添える。
 
 画面では「要件」タブ（検証率・検証シナリオへのリンク）と「テスト」タブ（Given/When/Then の色分け、`.feature` 用テキストの出力）に表示される。
 

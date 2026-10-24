@@ -57,7 +57,7 @@ scenario:
 | rule | string | `Rule:` / `ルール:` の下にある場合、その名前 |
 | verifies | string[] | このシナリオが検証する requirement id |
 | steps ★ | step[] | |
-| examples | `{"name", "header": [], "rows": [[]]}`[] | `Scenario Outline` の `Examples:`。あればアウトラインとして表示 |
+| examples | `{"name", "tags": [], "header": [], "rows": [[]]}`[] | `Scenario Outline` の `Examples:`。あればアウトラインとして表示 |
 | detail | string | 補足 |
 
 step: キーワードを含めた 1 行をそのまま文字列で書く。
@@ -67,6 +67,8 @@ step: キーワードを含めた 1 行をそのまま文字列で書く。
   `{"text": "And 次のユーザーがいる", "table": [["name", "role"], ["alice", "admin"]]}`
   `{"text": "Then 本文は次の通り", "doc": "{\"ok\": true}"}`
 - `<placeholder>` はそのまま書く（画面で強調される）。
+
+`.feature` ファイルがあるときは `scripts/import-gherkin.js` でこの形に変換できる（手で写さない）。
 
 path の例: `requirements/REQ-001/text`、`features/f-login/scenarios/s-lock/steps/3`、`features/f-login/background/1`
 

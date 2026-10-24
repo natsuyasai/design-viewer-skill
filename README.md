@@ -55,6 +55,7 @@ node scripts/build.js docs/design/x.design.json
 node scripts/edit.js docs/design/x.design.json outline
 node scripts/edit.js docs/design/x.design.json find 閾値
 node scripts/edit.js docs/design/x.design.json set components/rate-limiter/summary "新しい要約"
+node scripts/import-gherkin.js docs/design/x.design.json tests/features   # .feature を取り込む
 ```
 
 ## 構成
@@ -65,6 +66,7 @@ design-viewer/
 ├── assets/viewer.html        表示テンプレート（編集しない）
 ├── scripts/build.js          JSON を検証して HTML に埋め込む
 ├── scripts/edit.js           JSON の部分読み書き（outline / find / get / set / add / rm / rename / apply）
+├── scripts/import-gherkin.js .feature（Gherkin、英語・日本語）を features に取り込む
 ├── references/schema.md      JSON の項目一覧
 └── examples/                 サンプル（ログイン試行回数制限）
 ```

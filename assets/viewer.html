@@ -690,7 +690,8 @@ const isJa=f=>[...arr(f.background),...scnOf(f).flatMap(s=>arr(s.steps))].some(s
 function gherkinText(f){
   const ja=isJa(f),W=ja?{f:"機能",b:"背景",r:"ルール",s:"シナリオ",o:"シナリオアウトライン",e:"例"}:{f:"Feature",b:"Background",r:"Rule",s:"Scenario",o:"Scenario Outline",e:"Examples"};
   const tags=(t,ind)=>arr(t).length?ind+arr(t).map(x=>String(x).startsWith("@")?x:"@"+x).join(" ")+"\n":"";
-  const tbl=(rows,ind)=>arr(rows).map(r=>ind+"| "+arr(r).join(" | ")+" |\n").join("");
+  const cell=c=>String(c??"").replace(/\\/g,"\\\\").replace(/\|/g,"\\|").replace(/\n/g,"\\n");
+  const tbl=(rows,ind)=>arr(rows).map(r=>ind+"| "+arr(r).map(cell).join(" | ")+" |\n").join("");
   const steps=(xs,ind)=>arr(xs).map(st=>{const o=st&&typeof st==="object"?st:{};
     return ind+stepText(st).trim()+"\n"+tbl(o.table,ind+"  ")+(o.doc!=null?ind+'  """\n'+String(o.doc).split("\n").map(l=>ind+"  "+l).join("\n")+"\n"+ind+'  """\n':"");}).join("");
   let t=(ja?"# language: ja\n":"")+tags(f.tags,"")+`${W.f}: ${f.name||f.id}\n`;
@@ -700,8 +701,9 @@ function gherkinText(f){
   scnOf(f).forEach(sc=>{const ex=arr(sc.examples).filter(e=>e&&typeof e==="object");
     if((sc.rule||"")!==rule){rule=sc.rule||"";if(rule)t+=`\n  ${W.r}: ${rule}\n`;}
     const i=rule?"    ":"  ";
-    t+="\n"+tags(sc.tags,i)+`${i}${ex.length?W.o:W.s}: ${sc.name||sc.id}\n`+steps(sc.steps,i+"  ");
-    ex.forEach(e=>{t+=`\n${i}  ${W.e}:${e.name?" "+e.name:""}\n`+tbl([e.header,...arr(e.rows)],i+"    ");});
+    t+="\n"+tags(sc.tags,i)+`${i}${ex.length?W.o:W.s}: ${sc.name||sc.id}\n`
+      +(sc.detail?String(sc.detail).split("\n").map(l=>i+"  "+l).join("\n")+"\n":"")+steps(sc.steps,i+"  ");
+    ex.forEach(e=>{t+="\n"+tags(e.tags,i+"  ")+`${i}  ${W.e}:${e.name?" "+e.name:""}\n`+tbl([e.header,...arr(e.rows)],i+"    ");});
   });
   return t;
 }
