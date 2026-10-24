@@ -107,8 +107,17 @@ function opRm(data, p) {
 
 function opRename(data, p, to) {
   const s = segs(p);
-  if (s.length !== 2) throw new OpError("rename の path は <セクション>/<id> の形にしてください");
   if (to == null || to === "") throw new OpError("新しい id を指定してください");
+  if (s.length === 4 && s[0] === "features" && s[2] === "scenarios") {
+    // シナリオ id はどこからも参照されないので、feature の中で一意なら変えるだけ
+    const lst = walk(data, s.slice(0, 3));
+    if (!Array.isArray(lst)) throw new OpError(`${s.slice(0, 3).join("/")} は配列ではありません`);
+    const item = lst[findIndex(lst, s[3])];
+    if (lst.some((x) => isObj(x) && x.id === to)) throw new OpError(`id "${to}" は既にあります`);
+    item.id = to;
+    return 0;
+  }
+  if (s.length !== 2) throw new OpError("rename の path は <セクション>/<id>（シナリオは features/<id>/scenarios/<id>）の形にしてください");
   const [sec] = s;
   const lst = data[sec];
   if (!Array.isArray(lst)) throw new OpError(`${sec} がありません`);
@@ -217,7 +226,7 @@ function outline(data) {
       if (sec === "features") (Array.isArray(x.scenarios) ? x.scenarios : []).forEach((sc, j) => {
         if (!isObj(sc)) return;
         const v = Array.isArray(sc.verifies) && sc.verifies.length ? "  ✓ " + sc.verifies.join(",") : "";
-        out.push(`    scenarios/${sc.id != null ? sc.id : j + 1}  ${label(sc)}  ${(sc.steps || []).length} steps${v}`);
+        out.push(`    features/${key}/scenarios/${sc.id != null ? sc.id : j + 1}  ${label(sc)}  ${(sc.steps || []).length} steps${v}`);
       });
     });
   }
