@@ -14,10 +14,12 @@ const fs = require("fs");
 const path = require("path");
 
 const TEMPLATE = path.join(__dirname, "..", "assets", "viewer.html");
-const LIST_KEYS = ["actors", "components", "edges", "flows", "entities", "relations",
-  "apis", "decisions", "risks", "questions", "tasks", "layers"];
+const LIST_KEYS = ["requirements", "actors", "components", "edges", "flows", "entities", "relations",
+  "apis", "decisions", "features", "risks", "questions", "tasks", "layers"];
 const ENUMS = [
   ["meta", "status", ["draft", "review", "approved"]],
+  ["requirements", "pattern", ["ubiquitous", "event", "state", "unwanted", "optional", "complex"]],
+  ["requirements", "status", ["new", "changed", "existing"]],
   ["components", "status", ["new", "changed", "existing"]],
   ["entities", "status", ["new", "changed", "existing"]],
   ["risks", "level", ["high", "mid", "low"]],
@@ -27,6 +29,9 @@ const ENUMS = [
 const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const asList = (v) => (v == null || v === "" ? [] : Array.isArray(v) ? v : [v]);
 const list = (d, k) => (Array.isArray(d[k]) ? d[k] : []);
+// Gherkin のステップ キーワード（英語 / 日本語）。日本語は後ろに空白がなくてもよい
+const STEP_KW = /^(?:(?:Given|When|Then|And|But)\s|\*\s?|(?:前提|もし|ならば|且つ|かつ|然し|しかし|但し|ただし))/;
+const stepText = (s) => (isObj(s) ? s.text : s);
 
 function validate(d) {
   const errors = [], warns = [];
@@ -49,9 +54,47 @@ function validate(d) {
     return seen;
   };
   const comp = ids("components"), ent = ids("entities"), task = ids("tasks");
+  const req = ids("requirements"), feat = ids("features");
   ids("flows", false);
   const chk = (cond, msg) => { if (!cond) warns.push(msg); };
   const items = (k) => list(d, k).filter(isObj);
+
+  // 要件（EARS）とテスト（Gherkin）。仕様の原文を保つため、長さ・件数の警告はかけない
+  for (const r of items("requirements")) {
+    chk(r.text, `requirements "${r.id}": text（要件の文）がありません`);
+    for (const x of asList(r.components)) chk(comp.has(x), `requirements "${r.id}": components "${x}" が components にありません`);
+  }
+  const verified = new Set();
+  const chkSteps = (steps, where) => asList(steps).forEach((s, i) => {
+    const t = stepText(s);
+    if (typeof t !== "string" || !t.trim()) { errors.push(`${where}: steps[${i}] は文字列か {"text": ...} にしてください`); return; }
+    chk(STEP_KW.test(t.trim()), `${where}: ステップ ${i + 1}「${t.slice(0, 30)}」が Given / When / Then / And / But（前提 / もし / ならば / かつ / しかし）で始まっていません`);
+  });
+  for (const f of items("features")) {
+    chk(f.name, `features "${f.id}": name がありません`);
+    chkSteps(f.background, `features "${f.id}" background`);
+    const seen = new Set();
+    asList(f.scenarios).forEach((s, i) => {
+      if (!isObj(s)) { errors.push(`features "${f.id}": scenarios[${i}] はオブジェクトにしてください`); return; }
+      if (s.id == null) errors.push(`features "${f.id}": scenarios[${i}] に id がありません`);
+      else if (seen.has(s.id)) errors.push(`features "${f.id}": scenario id "${s.id}" が重複しています`);
+      seen.add(s.id);
+      const where = `features "${f.id}" scenario "${s.id}"`;
+      chk(asList(s.steps).length, `${where}: steps が空です`);
+      chkSteps(s.steps, where);
+      for (const x of asList(s.verifies)) { chk(req.has(x), `${where}: verifies "${x}" が requirements にありません`); verified.add(x); }
+      for (const ex of asList(s.examples)) {
+        if (!isObj(ex)) continue;
+        const n = asList(ex.header).length;
+        asList(ex.rows).forEach((row, ri) => chk(asList(row).length === n, `${where}: examples の ${ri + 1} 行目の列数が header（${n}列）と違います`));
+      }
+    });
+    chk(asList(f.scenarios).length, `features "${f.id}": scenarios が空です`);
+  }
+  if (req.size && feat.size) {
+    const un = [...req].filter((x) => !verified.has(x));
+    chk(!un.length, `シナリオで検証されていない要件があります: ${un.join(", ")}（意図的なら無視してよい）`);
+  }
 
   for (const e of items("edges")) {
     chk(comp.has(e.from), `edges: from "${e.from}" が components にありません`);

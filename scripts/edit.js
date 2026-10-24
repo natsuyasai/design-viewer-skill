@@ -13,6 +13,7 @@ design.json を部分的に読む・直す（全体を読み直さずに済ま�
 
 path  : セクション/キー/フィールド
         例 components/rate-limiter/summary  flows/login-fail/steps/3  overview/tldr  risks/r1
+           requirements/req-lock/text  features/f-login/scenarios/s-lock/steps/3
         キー = id（あれば）または 1 始まりの番号（画面の表示と同じ）
 value : JSON として読めればその値、読めなければ文字列として扱う
 ops   : [{"op":"set","path":"...","value":...}, {"op":"add","path":"...","value":...,"at":2},
@@ -131,6 +132,11 @@ function opRename(data, p, to) {
     }
     for (const t of L("tasks")) fix(t, "components");
     for (const a of L("apis")) fix(a, "component");
+    for (const r of L("requirements")) fix(r, "components");
+  } else if (sec === "requirements") {
+    for (const f of L("features")) {
+      for (const sc of (isObj(f) && Array.isArray(f.scenarios) ? f.scenarios : [])) fix(sc, "verifies");
+    }
   } else if (sec === "entities") {
     for (const r of L("relations")) { fix(r, "from"); fix(r, "to"); }
   } else if (sec === "tasks") {
@@ -152,7 +158,7 @@ function runOp(data, op) {
 
 function label(x) {
   if (!isObj(x)) return String(x).slice(0, 50);
-  for (const k of ["name", "title", "q", "label", "path", "signature"]) if (x[k]) return String(x[k]).slice(0, 50);
+  for (const k of ["name", "title", "q", "label", "path", "signature", "text"]) if (x[k]) return String(x[k]).slice(0, 50);
   return "";
 }
 
@@ -187,8 +193,8 @@ function outline(data) {
     out.push("overview: " + Object.entries(ov).map(([k, v]) => (Array.isArray(v) ? `${k} ${v.length}` : `${k} ✓`)).join(" / "));
   }
   if (Array.isArray(data.layers) && data.layers.length) out.push("layers: " + data.layers.join(" > "));
-  for (const sec of ["actors", "components", "edges", "flows", "entities", "relations",
-    "apis", "decisions", "risks", "questions", "tasks"]) {
+  for (const sec of ["requirements", "actors", "components", "edges", "flows", "entities", "relations",
+    "apis", "decisions", "features", "risks", "questions", "tasks"]) {
     const lst = data[sec];
     if (!Array.isArray(lst) || !lst.length) continue;
     out.push(`${sec} (${lst.length})`);
@@ -200,12 +206,19 @@ function outline(data) {
       else if (sec === "flows") extra = `  ${(x.steps || []).length} steps`;
       else if (sec === "entities") extra = `  ${(x.fields || []).length} fields`;
       else if (sec === "apis") extra = "  " + String(x.summary || "").slice(0, 40);
+      else if (sec === "requirements") extra = x.pattern ? `  [${x.pattern}]` : "";
+      else if (sec === "features") extra = `  ${(x.scenarios || []).length} scenarios`;
       else if (sec === "risks") extra = `  [${x.level || "-"}]`;
       else if (sec === "tasks" && Array.isArray(x.dependsOn) && x.dependsOn.length) extra = "  ← " + x.dependsOn.join(",");
       if (sec === "edges" || sec === "relations") name = x.label || x.type || "";
       else if (sec === "apis") name = [x.method, x.path || x.signature].filter(Boolean).join(" ").slice(0, 60);
       else name = label(x);
       out.push(`  ${key}  ${name}${extra}`);
+      if (sec === "features") (Array.isArray(x.scenarios) ? x.scenarios : []).forEach((sc, j) => {
+        if (!isObj(sc)) return;
+        const v = Array.isArray(sc.verifies) && sc.verifies.length ? "  ✓ " + sc.verifies.join(",") : "";
+        out.push(`    scenarios/${sc.id != null ? sc.id : j + 1}  ${label(sc)}  ${(sc.steps || []).length} steps${v}`);
+      });
     });
   }
   return out.join("\n");
